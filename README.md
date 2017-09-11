@@ -27,7 +27,7 @@ The compose file will create the following named volumes:
 Build the image locally:
 
 ```console
-$ docker build -t slurm-docker-cluster .
+$ docker build -t slurm-docker-cluster:17.02.7 .
 ```
 
 ## Starting the Cluster
@@ -47,6 +47,13 @@ script:
 $ ./register_cluster.sh
 ```
 
+> Note: You may have to wait a few seconds for the cluster daemons to become
+> ready before registering the cluster.  Otherwise, you may get an error such
+> as **sacctmgr: error: Problem talking to the database: Connection refused**.
+>
+> You can check the status of the cluster by viewing the logs: `docker-compose
+> logs -f`
+
 ## Accessing the Cluster
 
 Use `docker exec` to run a bash shell on the controller container:
@@ -55,7 +62,13 @@ Use `docker exec` to run a bash shell on the controller container:
 $ docker exec -it slurmctld bash
 ```
 
-From the shell, execute slurm commands.
+From the shell, execute slurm commands, for example:
+
+```console
+[root@slurmctld /]# sinfo
+PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
+normal*      up 5-00:00:00      2   idle c[1-2]
+```
 
 ## Submitting Jobs
 
@@ -87,5 +100,5 @@ To remove all containers and volumes, run:
 
 ```console
 $ docker-compose rm -sf
-$ docker volume rm slurmcluster_etc_munge slurmcluster_etc_slurm slurmcluster_slurm_jobdir slurmcluster_var_lib_mysql slurmcluster_var_log_slurm
+$ docker volume rm slurmdockercluster_etc_munge slurmdockercluster_etc_slurm slurmdockercluster_slurm_jobdir slurmdockercluster_var_lib_mysql slurmdockercluster_var_log_slurm
 ```
