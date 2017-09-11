@@ -30,7 +30,7 @@ Build the image locally:
 $ docker build -t slurm-docker-cluster .
 ```
 
-## Usage
+## Starting the Cluster
 
 Run `docker-compose` to instantiate the cluster:
 
@@ -38,7 +38,10 @@ Run `docker-compose` to instantiate the cluster:
 $ docker-compose up -d
 ```
 
-To register the cluster to the slurmdbd daemon, run the `register_cluster.sh` script:
+## Register the Cluster with SlurmDBD
+
+To register the cluster to the slurmdbd daemon, run the `register_cluster.sh`
+script:
 
 ```console
 $ ./register_cluster.sh
@@ -52,6 +55,8 @@ Use `docker exec` to run a bash shell on the controller container:
 $ docker exec -it slurmctld bash
 ```
 
+From the shell, execute slurm commands.
+
 ## Submitting Jobs
 
 The `slurm_jobdir` named volume is mounted on each Slurm container as `/data`.
@@ -64,6 +69,16 @@ the `/data` directory when on the **slurmctld** container and then submit a job:
 Submitted batch job 2
 [root@slurmctld data]# ls
 slurm-2.out
+```
+
+## Stopping and Restarting the Cluster
+
+```console
+$ docker-compose stop
+```
+
+```console
+$ docker-compose start
 ```
 
 ## Deleting the Cluster
