@@ -22,6 +22,14 @@ The compose file will create the following named volumes:
 * var_lib_mysql     ( -> /var/lib/mysql )
 * var_log_slurm     ( -> /var/log/slurm )
 
+## Building the Docker Image
+
+Build the image locally:
+
+```console
+$ docker build -t slurm-docker-cluster .
+```
+
 ## Usage
 
 Run `docker-compose` to instantiate the cluster:
