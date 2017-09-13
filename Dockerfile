@@ -2,7 +2,7 @@ FROM centos:7
 MAINTAINER Giovanni Torres
 
 LABEL org.label-schema.vcs-url="https://github.com/giovtorres/slurm-docker-cluster" \
-     org.label-schema.docker.cmd="docker run -it -h ernie giovtorres/slurm-docker-cluster:latest" \
+     org.label-schema.docker.cmd="docker-compose up -d" \
      org.label-schema.name="slurm-docker-cluster" \
      org.label-schema.description="Slurm Docker cluster on CentOS 7"
 
@@ -93,4 +93,4 @@ COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-CMD ["slurmctld"]
+CMD ["slurmdbd"]
