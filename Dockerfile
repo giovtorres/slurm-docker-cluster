@@ -20,6 +20,7 @@ RUN yum makecache fast \
            perl \
            gcc \
            gcc-c++\
+           gcc-gfortran\
            vim-enhanced \
            git \
            make \
@@ -35,6 +36,17 @@ RUN yum makecache fast \
            psmisc \
            bash-completion \
     && yum clean all
+
+RUN \
+    cd /usr/local/src/ && \
+    wget http://www.mpich.org/static/downloads/3.2/mpich-3.2.tar.gz && \
+    tar xf mpich-3.2.tar.gz && \
+    rm mpich-3.2.tar.gz && \
+    cd mpich-3.2 && \
+    ./configure && \
+    make && make install && \
+    cd /usr/local/src && \
+    rm -rf mpich-3.2
 
 RUN pip install Cython nose \
     && pip3 install Cython nose
