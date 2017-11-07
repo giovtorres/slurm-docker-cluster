@@ -34,6 +34,10 @@ int main(int argc, char** argv) {
 
   int ping_pong_count = 0;
   int partner_rank = (world_rank + 1) % 2;
+
+  gethostname(hostname, 1023);
+  printf("world_rank: %d host:%s\n", world_rank, hostname);
+
   while (ping_pong_count < PING_PONG_LIMIT) {
     if (world_rank == ping_pong_count % 2) {
       // Increment the ping pong count before you send it
