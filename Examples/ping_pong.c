@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     if (world_rank == ping_pong_count % 2) {
       // Increment the ping pong count before you send it
       ping_pong_count++;
-      MPI_Send(&ping_pong_count, 1, MPI_INT, partner_rank, 0, MPI_COMM_WORLD);
+      MPI_Ssend(&ping_pong_count, 1, MPI_INT, partner_rank, 0, MPI_COMM_WORLD);
       gethostname(hostname, 1023);
       printf("%d incremented and sent ping_pong_count %d to %d host:%s\n",
              world_rank, ping_pong_count, partner_rank, hostname);
