@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
   int world_size;
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-  // We are assuming at least 2 processes for this task
+  // We are assuming exactly 2 processes for this task
   if (world_size != 2) {
     fprintf(stderr, "World size must be two for %s\n", argv[0]);
     MPI_Abort(MPI_COMM_WORLD, 1);
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
       ping_pong_count++;
       MPI_Send(&ping_pong_count, 1, MPI_INT, partner_rank, 0, MPI_COMM_WORLD);
       gethostname(hostname, 1023);
-      printf("%d sent and incremented ping_pong_count %d to %d host:%s\n",
+      printf("%d incremented and sent ping_pong_count %d to %d host:%s\n",
              world_rank, ping_pong_count, partner_rank, hostname);
     } else {
       MPI_Recv(&ping_pong_count, 1, MPI_INT, partner_rank, 0, MPI_COMM_WORLD,
