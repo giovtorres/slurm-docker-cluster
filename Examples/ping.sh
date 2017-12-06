@@ -10,6 +10,6 @@
 #SBATCH --output=ping_%j.out         # Standard output and error log
 pwd; hostname; date
 
-echo "Runningping_pong on $SLURM_JOB_NUM_NODES nodes with $SLURM_NTASKS tasks, each with $SLURM_CPUS_PER_TASK cores."
+echo "Running ping_pong on $SLURM_JOB_NUM_NODES nodes with $SLURM_NTASKS tasks, each with $SLURM_CPUS_PER_TASK cores."
 
 srun --mpi=pmi2 /data/ping_pong

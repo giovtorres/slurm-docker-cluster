@@ -9,8 +9,12 @@ This code comes from mpitutorials (see the header in ping_pong.c) The code has b
 To use:
 
 * Start the container as described in the main README
-* docker cp ping_pong slurmctld:/data/ping_pong
-* docker cp ping.sh slurmctld:/data/ping.sh
+* From this directory:
+* docker cp . slurmctld:/data
+*
 * On the slurmctld:
 *   cd data
+*   make
+*
+*   Then you can run the examples e.g:
 *   sbatch ping.sh
