@@ -14,7 +14,7 @@ services:
       - var_lib_mysql:/var/lib/mysql
 
   slurmdbd:
-    image: slurm-docker-cluster:17.02.7
+    image: slurm-docker-cluster:17.02.9
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
@@ -28,7 +28,7 @@ services:
       - mysql
 
   slurmctld:
-    image: slurm-docker-cluster:17.02.7
+    image: slurm-docker-cluster:17.02.9
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
@@ -43,7 +43,7 @@ services:
       - "slurmdbd"
 
   c1:
-    image: slurm-docker-cluster:17.02.7
+    image: slurm-docker-cluster:17.02.9
     command: ["slurmd"]
     hostname: c1
     container_name: c1
@@ -58,10 +58,39 @@ services:
       - "slurmctld"
 
   c2:
-    image: slurm-docker-cluster:17.02.7
+    image: slurm-docker-cluster:17.02.9
     command: ["slurmd"]
     hostname: c2
     container_name: c2
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+  c3:
+    image: slurm-docker-cluster:17.02.9
+    command: ["slurmd"]
+    hostname: c3
+    container_name: c3
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+
+  c4:
+    image: slurm-docker-cluster:17.02.9
+    command: ["slurmd"]
+    hostname: c4
+    container_name: c4
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm

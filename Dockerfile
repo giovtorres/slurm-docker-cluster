@@ -6,8 +6,8 @@ LABEL org.label-schema.vcs-url="https://github.com/giovtorres/slurm-docker-clust
      org.label-schema.name="slurm-docker-cluster" \
      org.label-schema.description="Slurm Docker cluster on CentOS 7"
 
-ENV SLURM_VERSION 17.02.7
-ENV SLURM_DOWNLOAD_MD5 64009c1ed120b9ce5d79424dca743a06
+ENV SLURM_VERSION 17.02.9
+ENV SLURM_DOWNLOAD_MD5 6bd0b38e6bf08f3426a7dd1e663a2e3c
 ENV SLURM_DOWNLOAD_URL https://www.schedmd.com/downloads/latest/slurm-"$SLURM_VERSION".tar.bz2
 
 ENV GOSU_VERSION 1.10
@@ -20,6 +20,7 @@ RUN yum makecache fast \
            perl \
            gcc \
            gcc-c++\
+           gcc-gfortran\
            vim-enhanced \
            git \
            make \
@@ -35,6 +36,17 @@ RUN yum makecache fast \
            psmisc \
            bash-completion \
     && yum clean all
+
+RUN \
+    cd /usr/local/src/ && \
+    wget http://www.mpich.org/static/downloads/3.2/mpich-3.2.tar.gz && \
+    tar xf mpich-3.2.tar.gz && \
+    rm mpich-3.2.tar.gz && \
+    cd mpich-3.2 && \
+    ./configure && \
+    make && make install && \
+    cd /usr/local/src && \
+    rm -rf mpich-3.2
 
 RUN pip install Cython nose \
     && pip3 install Cython nose
