@@ -1,16 +1,16 @@
 FROM centos:7
-MAINTAINER Giovanni Torres
 
 LABEL org.label-schema.vcs-url="https://github.com/giovtorres/slurm-docker-cluster" \
-     org.label-schema.docker.cmd="docker-compose up -d" \
-     org.label-schema.name="slurm-docker-cluster" \
-     org.label-schema.description="Slurm Docker cluster on CentOS 7"
+      org.label-schema.docker.cmd="docker-compose up -d" \
+      org.label-schema.name="slurm-docker-cluster" \
+      org.label-schema.description="Slurm Docker cluster on CentOS 7" \
+      maintainer="Giovanni Torres"
 
-ENV SLURM_VERSION 17.02.7
-ENV SLURM_DOWNLOAD_MD5 64009c1ed120b9ce5d79424dca743a06
-ENV SLURM_DOWNLOAD_URL https://www.schedmd.com/downloads/latest/slurm-"$SLURM_VERSION".tar.bz2
+ARG SLURM_VERSION=17.02.9
+ARG SLURM_DOWNLOAD_MD5=6bd0b38e6bf08f3426a7dd1e663a2e3c
+ARG SLURM_DOWNLOAD_URL=https://download.schedmd.com/slurm/slurm-"$SLURM_VERSION".tar.bz2
 
-ENV GOSU_VERSION 1.10
+ARG GOSU_VERSION=1.10
 
 RUN yum makecache fast \
     && yum -y install epel-release \
@@ -34,7 +34,8 @@ RUN yum makecache fast \
            mariadb-devel \
            psmisc \
            bash-completion \
-    && yum clean all
+    && yum clean all \
+    && rm -rf /var/cache/yum
 
 RUN pip install Cython nose \
     && pip3 install Cython nose
