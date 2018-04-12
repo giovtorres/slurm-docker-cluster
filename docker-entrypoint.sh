@@ -8,11 +8,14 @@ then
 
     echo "---> Starting the Slurm Database Daemon (slurmdbd) ..."
 
-    until echo "SELECT 1" | mysql -h mysql -uslurm -ppassword 2>&1 > /dev/null
-    do
-        echo "-- Waiting for database to become active ..."
-        sleep 2
-    done
+    {
+        . /etc/slurm/slurmdbd.conf
+        until echo "SELECT 1" | mysql -h $StorageHost -u$StorageUser -p$StoragePass 2>&1 > /dev/null
+        do
+            echo "-- Waiting for database to become active ..."
+            sleep 2
+        done
+    }
     echo "-- Database is now active ..."
 
     exec gosu slurm /usr/sbin/slurmdbd -Dvvv
