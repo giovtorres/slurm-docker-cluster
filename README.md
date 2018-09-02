@@ -27,7 +27,7 @@ The compose file will create the following named volumes:
 Build the image locally:
 
 ```console
-$ docker build -t slurm-docker-cluster:17.02.10 .
+$ docker build -t slurm-docker-cluster:17.02.11 .
 ```
 
 ## Starting the Cluster
