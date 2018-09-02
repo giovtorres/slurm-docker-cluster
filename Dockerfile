@@ -6,9 +6,9 @@ LABEL org.label-schema.vcs-url="https://github.com/giovtorres/slurm-docker-clust
       org.label-schema.description="Slurm Docker cluster on CentOS 7" \
       maintainer="Giovanni Torres"
 
-ARG SLURM_VERSION=17.02.10
-ARG SLURM_DOWNLOAD_MD5=89f0258430417028c9fe30c7a3a3fe34
-ARG SLURM_DOWNLOAD_URL=https://download.schedmd.com/slurm/slurm-17.02.10.tar.bz2
+ARG SLURM_VERSION=17.02.11
+ARG SLURM_DOWNLOAD_MD5=b32f4260a921d335a2d52950593f0a29
+ARG SLURM_DOWNLOAD_URL=https://download.schedmd.com/slurm/slurm-17.02.11.tar.bz2
 
 ARG GOSU_VERSION=1.10
 
