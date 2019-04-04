@@ -38,7 +38,7 @@ RUN yum makecache fast \
     && rm -rf /var/cache/yum
 
 RUN pip install Cython nose \
-    && pip3 install Cython nose
+    && pip3.4 install Cython nose
 
 RUN set -x \
     && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64" \
