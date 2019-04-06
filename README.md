@@ -27,7 +27,7 @@ The compose file will create the following named volumes:
 Build the image locally:
 
 ```console
-$ docker build -t slurm-docker-cluster:17.02.11 .
+$ docker build -t slurm-docker-cluster:18.08.6 .
 ```
 
 ## Starting the Cluster
@@ -37,22 +37,6 @@ Run `docker-compose` to instantiate the cluster:
 ```console
 $ docker-compose up -d
 ```
-
-## Register the Cluster with SlurmDBD
-
-To register the cluster to the slurmdbd daemon, run the `register_cluster.sh`
-script:
-
-```console
-$ ./register_cluster.sh
-```
-
-> Note: You may have to wait a few seconds for the cluster daemons to become
-> ready before registering the cluster.  Otherwise, you may get an error such
-> as **sacctmgr: error: Problem talking to the database: Connection refused**.
->
-> You can check the status of the cluster by viewing the logs: `docker-compose
-> logs -f`
 
 ## Accessing the Cluster
 
@@ -88,9 +72,6 @@ slurm-2.out
 
 ```console
 $ docker-compose stop
-```
-
-```console
 $ docker-compose start
 ```
 
@@ -99,6 +80,7 @@ $ docker-compose start
 To remove all containers and volumes, run:
 
 ```console
-$ docker-compose rm -sf
+$ docker-compose stop
+$ docker-compose rm -f
 $ docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
 ```
