@@ -27,15 +27,25 @@ The compose file will create the following named volumes:
 Build the image locally:
 
 ```console
-$ docker build -t slurm-docker-cluster:18.08.6 .
+docker build -t slurm-docker-cluster:19.05.1 .
 ```
+
+Build a different version of Slurm using Docker build args and the Slurm Git
+tag:
+
+```console
+docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.05.2
+```
+
+> Note: You will need to update the container image version in
+> [docker-compose.yml](docker-compose.yml).
 
 ## Starting the Cluster
 
 Run `docker-compose` to instantiate the cluster:
 
 ```console
-$ docker-compose up -d
+docker-compose up -d
 ```
 
 ## Accessing the Cluster
@@ -43,7 +53,7 @@ $ docker-compose up -d
 Use `docker exec` to run a bash shell on the controller container:
 
 ```console
-$ docker exec -it slurmctld bash
+docker exec -it slurmctld bash
 ```
 
 From the shell, execute slurm commands, for example:
@@ -71,8 +81,8 @@ slurm-2.out
 ## Stopping and Restarting the Cluster
 
 ```console
-$ docker-compose stop
-$ docker-compose start
+docker-compose stop
+docker-compose start
 ```
 
 ## Deleting the Cluster
@@ -80,7 +90,7 @@ $ docker-compose start
 To remove all containers and volumes, run:
 
 ```console
-$ docker-compose stop
-$ docker-compose rm -f
-$ docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
+docker-compose stop
+docker-compose rm -f
+docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
 ```
