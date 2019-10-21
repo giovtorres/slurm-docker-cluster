@@ -40,6 +40,8 @@ docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.
 > Note: You will need to update the container image version in
 > [docker-compose.yml](docker-compose.yml).
 
+
+
 ## Starting the Cluster
 
 Run `docker-compose` to instantiate the cluster:
@@ -47,6 +49,22 @@ Run `docker-compose` to instantiate the cluster:
 ```console
 docker-compose up -d
 ```
+
+## Register the Cluster with SlurmDBD
+
+To register the cluster to the slurmdbd daemon, run the `register_cluster.sh`
+script:
+
+```console
+./register_cluster.sh
+```
+
+> Note: You may have to wait a few seconds for the cluster daemons to become
+> ready before registering the cluster.  Otherwise, you may get an error such
+> as **sacctmgr: error: Problem talking to the database: Connection refused**.
+>
+> You can check the status of the cluster by viewing the logs: `docker-compose
+> logs -f`
 
 ## Accessing the Cluster
 
