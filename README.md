@@ -34,7 +34,7 @@ Build a different version of Slurm using Docker build args and the Slurm Git
 tag:
 
 ```console
-docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.05.2
+docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.05.2 .
 ```
 
 > Note: You will need to update the container image version in
