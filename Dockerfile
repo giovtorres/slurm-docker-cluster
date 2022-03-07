@@ -51,9 +51,8 @@ RUN set -ex \
     && gosu nobody true
 
 RUN set -x \
-    && git clone https://github.com/SchedMD/slurm.git \
+    && git clone -b ${SLURM_TAG} --single-branch --depth=1 https://github.com/SchedMD/slurm.git \
     && pushd slurm \
-    && git checkout tags/$SLURM_TAG \
     && ./configure --enable-debug --prefix=/usr --sysconfdir=/etc/slurm \
         --with-mysql_config=/usr/bin  --libdir=/usr/lib64 \
     && make install \
