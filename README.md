@@ -40,7 +40,7 @@ docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.
 Or equivalently using `docker-compose`:
 
 ```console
-SLURM_TAG=slurm-19-05-2-1 IMAGE_TAG=19.05.2 docker_compose build
+SLURM_TAG=slurm-19-05-2-1 IMAGE_TAG=19.05.2 docker-compose build
 ```
 
 
