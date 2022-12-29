@@ -2,7 +2,7 @@ version: "2.2"
 
 services:
   mysql:
-    image: mysql:5.7
+    image: mariadb:10.10
     hostname: mysql
     container_name: mysql
     environment:
