@@ -33,6 +33,8 @@ RUN set -ex \
        psmisc \
        bash-completion \
        vim-enhanced \
+       http-parser-devel \
+       json-c-devel \
     && yum clean all \
     && rm -rf /var/cache/yum
 
