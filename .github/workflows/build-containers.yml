@@ -2,7 +2,8 @@ name: Build and push Docker image
 on:
   push:
     paths:
-      - .github/workflows/**
+      - .github/workflows/build-containers.yml
+			- ./Dockerfile
     workflow_dispatch:
 
 jobs:
@@ -30,13 +31,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install apptainer
-        run: |
-          sudo apt install -y software-properties-common
-          sudo add-apt-repository -y ppa:apptainer/ppa
-          sudo apt update
-          sudo apt install -y apptainer
 
       - name: Calculate metadata for image
         id: image-meta
