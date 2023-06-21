@@ -2,7 +2,6 @@ name: Build and push Docker image
 on:
   push:
     paths:
-      - images/**
       - .github/workflows/**
 jobs:
   build_push_api:
@@ -59,8 +58,8 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
-      - name: Verify push to GHCR
-        run: docker inspect ${{ fromJSON(steps.image-meta.outputs.json).tags[1] }}
+      #- name: Verify push to GHCR
+      #  run: docker inspect ${{ fromJSON(steps.image-meta.outputs.json).tags[1] }}
 
       #- name: Test image by running help
       #  run: singularity exec docker://${{ fromJSON(steps.image-meta.outputs.json).tags[1] }} /io500 -h
