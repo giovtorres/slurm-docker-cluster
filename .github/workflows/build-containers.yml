@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - .github/workflows/**
+	workflow_dispatch:
 jobs:
   build_push_api:
     name: Build and push Docker image
