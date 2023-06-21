@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.source="https://github.com/stackhpc/slurm-docker-
       org.label-schema.docker.cmd="docker-compose up -d" \
       maintainer="StackHPC"
 
-ARG SLURM_TAG=slurm-23-02
+ARG SLURM_TAG=slurm-23.02
 ARG GOSU_VERSION=1.11
 
 RUN set -ex \
