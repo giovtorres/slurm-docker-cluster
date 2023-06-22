@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 if [ "$1" = "slurmdbd" ]
 then
@@ -8,6 +8,8 @@ then
 
     echo "---> Starting the Slurm Database Daemon (slurmdbd) ..."
 
+    chown slurm:slurm /etc/slurm/slurmdbd.conf
+    chmod 600 /etc/slurm/slurmdbd.conf
     {
         . /etc/slurm/slurmdbd.conf
         until echo "SELECT 1" | mysql -h $StorageHost -u$StorageUser -p$StoragePass 2>&1 > /dev/null

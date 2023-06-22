@@ -62,8 +62,9 @@ RUN set -x \
     && popd \
     && rm -rf slurm \
     && groupadd -r --gid=990 slurm \
-    && useradd -r -g slurm --uid=990 slurm \
-    && mkdir /etc/sysconfig/slurm \
+    && useradd -r -g slurm --uid=990 slurm
+
+RUN mkdir /etc/sysconfig/slurm \
         /var/spool/slurmd \
         /var/run/slurmd \
         /var/run/slurmdbd \
@@ -81,17 +82,9 @@ RUN set -x \
         /var/lib/slurmd/qos_usage \
         /var/lib/slurmd/fed_mgr_state \
     && chown -R slurm:slurm /var/*/slurm* \
-    && chown -R slurm:slurm /etc/slurm \
-    && chmod -R 600 /etc/slurm \
     && /sbin/create-munge-key
 
-#COPY slurm.conf /etc/slurm/slurm.conf
-#COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
-#RUN set -x \
-#    && chown slurm:slurm /etc/slurm/slurmdbd.conf \
-#    && chmod 600 /etc/slurm/slurmdbd.conf
-
-
+VOLUME /etc/slurm
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
