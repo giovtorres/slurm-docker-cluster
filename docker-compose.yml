@@ -19,6 +19,7 @@ services:
       context: .
       args:
         SLURM_TAG: ${SLURM_TAG:-slurm-23.02}
+    #command: sh -c "set -x && chown slurm:slurm /etc/slurm/slurmdbd.conf && chmod 600 /etc/slurm/slurmdbd.conf && slurmdbd
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
@@ -26,6 +27,8 @@ services:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
       - var_log_slurm:/var/log/slurm
+      - ./slurm.conf:/etc/slurm/slurm.conf
+      - ./slurmdbd.conf:/etc/slurm/slurmdbd.conf
     expose:
       - "6819"
     depends_on:
@@ -41,6 +44,8 @@ services:
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
+      - ./slurm.conf:/etc/slurm/slurm.conf
+      - ./slurmdbd.conf:/etc/slurm/slurmdbd.conf
     expose:
       - "6817"
     depends_on:
@@ -56,6 +61,8 @@ services:
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
+      - ./slurm.conf:/etc/slurm/slurm.conf
+      - ./slurmdbd.conf:/etc/slurm/slurmdbd.conf
     expose:
       - "6818"
     depends_on:
@@ -71,6 +78,8 @@ services:
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
+      - ./slurm.conf:/etc/slurm/slurm.conf
+      - ./slurmdbd.conf:/etc/slurm/slurmdbd.conf
     expose:
       - "6818"
     depends_on:
