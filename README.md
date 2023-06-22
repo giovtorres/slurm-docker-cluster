@@ -17,7 +17,6 @@ The compose file will run the following containers:
 The compose file will create the following named volumes:
 
 * etc_munge         ( -> /etc/munge     )
-* etc_slurm         ( -> /etc/slurm     )
 * slurm_jobdir      ( -> /data          )
 * var_lib_mysql     ( -> /var/lib/mysql )
 * var_log_slurm     ( -> /var/log/slurm )
@@ -37,19 +36,12 @@ tag:
 docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.05.2 .
 ```
 
-Or equivalently using `docker-compose`:
-
-```console
-SLURM_TAG=slurm-19-05-2-1 IMAGE_TAG=19.05.2 docker-compose build
-```
-
-
 ## Starting the Cluster
 
 Run `docker-compose` to instantiate the cluster:
 
 ```console
-IMAGE_TAG=19.05.2 docker-compose up -d
+docker compose up -d
 ```
 
 ## Register the Cluster with SlurmDBD
@@ -101,8 +93,8 @@ slurm-2.out
 ## Stopping and Restarting the Cluster
 
 ```console
-docker-compose stop
-docker-compose start
+docker compose stop
+docker compose start
 ```
 
 ## Deleting the Cluster
@@ -110,7 +102,5 @@ docker-compose start
 To remove all containers and volumes, run:
 
 ```console
-docker-compose stop
-docker-compose rm -f
-docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
+./rm-cluster
 ```
