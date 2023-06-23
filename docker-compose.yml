@@ -12,6 +12,10 @@ services:
       MYSQL_PASSWORD: password
     volumes:
       - var_lib_mysql:/var/lib/mysql
+    ports:
+      - 3306:3306
+    expose:
+      - 3306
 
   slurmdbd:
     image: slurm-docker-cluster:${IMAGE_TAG:-e41370d}

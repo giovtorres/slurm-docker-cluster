@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kompose.cmd: kompose convert
+    kompose.version: 1.26.0 (40646f47)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: slurmdbd
+  name: slurmdbd
+spec:
+  ports:
+    - name: "6819"
+      port: 6819
+      targetPort: 6819
+  selector:
+    io.kompose.service: slurmdbd
+status:
+  loadBalancer: {}
