@@ -36,19 +36,20 @@ spec:
             - mountPath: /var/log/slurm
               name: var-log-slurm
             - mountPath: /etc/slurm/slurm.conf
-              name: slurmdbd-claim2
+              name: slurm-config-volume
             - mountPath: /etc/slurm/slurmdbd.conf
-              name: slurmdbd-claim3
+              name: dbd-config-volume
       hostname: slurmdbd
       restartPolicy: Always
       volumes:
         - name: var-log-slurm
           persistentVolumeClaim:
             claimName: var-log-slurm
-        - name: slurmdbd-claim2
-          persistentVolumeClaim:
-            claimName: slurmdbd-claim2
-        - name: slurmdbd-claim3
-          persistentVolumeClaim:
-            claimName: slurmdbd-claim3
+        - name: dbd-config-volume
+          configMap:
+            name: slurmdbd-conf-configmap
+            defaultMode: 384
+        - name: slurm-config-volume
+          configMap:
+            name: slurm-conf-configmap
 status: {}
