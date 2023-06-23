@@ -6,13 +6,13 @@ metadata:
     kompose.version: 1.26.0 (40646f47)
   creationTimestamp: null
   labels:
-    io.kompose.service: slurmdbd
-  name: slurmdbd
+    io.kompose.service: slurmctld
+  name: slurmctld
 spec:
   replicas: 1
   selector:
     matchLabels:
-      io.kompose.service: slurmdbd
+      io.kompose.service: slurmctld
   strategy:
     type: Recreate
   template:
@@ -22,38 +22,33 @@ spec:
         kompose.version: 1.26.0 (40646f47)
       creationTimestamp: null
       labels:
-        io.kompose.service: slurmdbd
+        io.kompose.service: slurmctld
     spec:
       containers:
         - args:
-            - slurmdbd
-          image: slurm-docker-cluster:e41370d
-          name: slurmdbd
+            - slurmctld
+          image: ghcr.io/stackhpc/slurm-docker-cluster:e41370d
+          name: slurmctld
           ports:
-            - containerPort: 6819
+            - containerPort: 6817
           resources: {}
           volumeMounts:
-            - mountPath: /etc/munge
-              name: etc-munge
+            - mountPath: /data
+              name: slurm-jobdir
             - mountPath: /var/log/slurm
               name: var-log-slurm
             - mountPath: /etc/slurm/slurm.conf
-              name: slurmdbd-claim2
-            - mountPath: /etc/slurm/slurmdbd.conf
-              name: slurmdbd-claim3
-      hostname: slurmdbd
+              name: slurmctld-claim3
+      hostname: slurmctld
       restartPolicy: Always
       volumes:
-        - name: etc-munge
+        - name: slurm-jobdir
           persistentVolumeClaim:
-            claimName: etc-munge
+            claimName: slurm-jobdir
         - name: var-log-slurm
           persistentVolumeClaim:
             claimName: var-log-slurm
-        - name: slurmdbd-claim2
+        - name: slurmctld-claim3
           persistentVolumeClaim:
-            claimName: slurmdbd-claim2
-        - name: slurmdbd-claim3
-          persistentVolumeClaim:
-            claimName: slurmdbd-claim3
+            claimName: slurmctld-claim3
 status: {}

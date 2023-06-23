@@ -6,13 +6,13 @@ metadata:
     kompose.version: 1.26.0 (40646f47)
   creationTimestamp: null
   labels:
-    io.kompose.service: slurmctld
-  name: slurmctld
+    io.kompose.service: c1
+  name: c1
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      io.kompose.service: slurmctld
+      io.kompose.service: c1
   strategy:
     type: Recreate
   template:
@@ -22,38 +22,38 @@ spec:
         kompose.version: 1.26.0 (40646f47)
       creationTimestamp: null
       labels:
-        io.kompose.service: slurmctld
+        io.kompose.service: c1
     spec:
       containers:
         - args:
-            - slurmctld
-          image: slurm-docker-cluster:e41370d
-          name: slurmctld
+            - slurmd
+          image: ghcr.io/stackhpc/slurm-docker-cluster:e41370d
+          name: c1
           ports:
-            - containerPort: 6817
+            - containerPort: 6818
           resources: {}
           volumeMounts:
-            - mountPath: /etc/munge
-              name: etc-munge
+#            - mountPath: /etc/munge
+#              name: etc-munge
             - mountPath: /data
               name: slurm-jobdir
             - mountPath: /var/log/slurm
               name: var-log-slurm
             - mountPath: /etc/slurm/slurm.conf
-              name: slurmctld-claim3
-      hostname: slurmctld
+              name: c1-claim3
+      hostname: c1
       restartPolicy: Always
       volumes:
-        - name: etc-munge
-          persistentVolumeClaim:
-            claimName: etc-munge
+#        - name: etc-munge
+#          persistentVolumeClaim:
+#            claimName: etc-munge
         - name: slurm-jobdir
           persistentVolumeClaim:
             claimName: slurm-jobdir
         - name: var-log-slurm
           persistentVolumeClaim:
             claimName: var-log-slurm
-        - name: slurmctld-claim3
+        - name: c1-claim3
           persistentVolumeClaim:
-            claimName: slurmctld-claim3
+            claimName: c1-claim3
 status: {}
