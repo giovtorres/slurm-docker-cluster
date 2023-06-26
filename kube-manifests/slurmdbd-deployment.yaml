@@ -24,10 +24,14 @@ spec:
       labels:
         io.kompose.service: slurmdbd
     spec:
+      securityContext: 
+      #  runAsUser: 990
+      #  runAsGroup: 990
+      #  fsGroup: 990
       containers:
         - args:
             - slurmdbd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:e41370d
+          image: ghcr.io/stackhpc/slurm-docker-cluster:1d4c5af
           name: slurmdbd
           ports:
             - containerPort: 6819
@@ -35,10 +39,20 @@ spec:
           volumeMounts:
             - mountPath: /var/log/slurm
               name: var-log-slurm
-            - mountPath: /etc/slurm/slurm.conf
-              name: slurm-config-volume
-            - mountPath: /etc/slurm/slurmdbd.conf
-              name: dbd-config-volume
+      #      - mountPath: /etc/slurm/slurm.conf
+      #        name: slurm-config-volume
+      #        subPath: slurm.conf
+      #      - mountPath: /etc/slurm/slurmdbd.conf
+      #        name: dbd-config-volume
+      #        subPath: slurmdbd.conf
+      #initContainers:
+      #  - name: init-perms-set
+      #    image: busybox
+      #    command: ["sh", "-c", "addgroup --system --gid=990 slurm; adduser --system -G slurm --uid=990 slurm && chown slurm:slurm /etc/slurm/slurmdbd.conf"]
+      #    volumeMounts:
+      #      - mountPath: /etc/slurm/slurmdbd.conf
+      #        name: dbd-config-volume
+      #        subPath: slurmdbd.conf
       hostname: slurmdbd
       restartPolicy: Always
       volumes:

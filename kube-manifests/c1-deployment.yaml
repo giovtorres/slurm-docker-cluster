@@ -27,33 +27,27 @@ spec:
       containers:
         - args:
             - slurmd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:e41370d
+          image: ghcr.io/stackhpc/slurm-docker-cluster:1d4c5af
           name: c1
           ports:
             - containerPort: 6818
           resources: {}
           volumeMounts:
-#            - mountPath: /etc/munge
-#              name: etc-munge
+    #      - mountPath: /etc/slurm/slurm.conf
+    #        name: slurm-config-volume
+    #        subPath: slurm.conf
             - mountPath: /data
               name: slurm-jobdir
-            - mountPath: /var/log/slurm
-              name: var-log-slurm
-            - mountPath: /etc/slurm/slurm.conf
-              name: c1-claim3
       hostname: c1
       restartPolicy: Always
       volumes:
-#        - name: etc-munge
-#          persistentVolumeClaim:
-#            claimName: etc-munge
         - name: slurm-jobdir
-          persistentVolumeClaim:
-            claimName: slurm-jobdir
-        - name: var-log-slurm
-          persistentVolumeClaim:
-            claimName: var-log-slurm
-        - name: c1-claim3
-          persistentVolumeClaim:
-            claimName: c1-claim3
+          nfs:
+            server: 172.20.37.208
+            path: /exports/k8s-nfs
+          #persistentVolumeClaim:
+          #  claimName: slurm-jobdir
+    #  - name: slurm-config-volume
+    #    configMap:
+    #      name: slurm-conf-configmap
 status: {}
