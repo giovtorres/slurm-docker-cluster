@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - slurmd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:5063ece
+          image: ghcr.io/stackhpc/slurm-docker-cluster:d68068c
           name: c1
           ports:
             - containerPort: 6818
@@ -38,7 +38,6 @@ spec:
               subPath: slurm.conf
             - mountPath: /data
               name: slurm-jobdir
-      hostname: c1
       restartPolicy: Always
       volumes:
         - name: slurm-jobdir

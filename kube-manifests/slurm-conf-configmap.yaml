@@ -9,7 +9,7 @@ data:
     # See the slurm.conf man page for more information.
     #
     ClusterName=linux
-    SlurmctldHost=slurmctld(slurmctld)
+    SlurmctldHost=slurmctld
     #
     SlurmUser=slurm
     SlurmctldPort=6817
@@ -34,7 +34,7 @@ data:
     #
     # SCHEDULING
     SchedulerType=sched/backfill
-    SelectType=select/cons_res
+    SelectType=select/cons_tres
     SelectTypeParameters=CR_CPU_Memory
     FastSchedule=1
     #
@@ -54,8 +54,9 @@ data:
     AccountingStorageHost=slurmdbd
     AccountingStoragePort=6819
     #
-    # COMPUTE NODES
-    NodeName=c[1-2] RealMemory=1000 State=UNKNOWN
     #
+    MaxNodeCount=10
     # PARTITIONS
-    PartitionName=normal Default=yes Nodes=c[1-2] Priority=50 DefMemPerCPU=500 Shared=NO MaxNodes=2 MaxTime=5-00:00:00 DefaultTime=5-00:00:00 State=UP
+    PartitionName=all Default=yes Nodes=ALL
+
+    TreeWidth=65533
