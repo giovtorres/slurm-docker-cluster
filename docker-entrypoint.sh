@@ -60,7 +60,7 @@ then
     echo "-- slurmctld is now active ..."
 
     echo "---> Starting the Slurm Node Daemon (slurmd) ..."
-    exec /usr/sbin/slurmd -Dvvv
+    exec /usr/sbin/slurmd -Z -Dvvv
 fi
 
 exec "$@"
