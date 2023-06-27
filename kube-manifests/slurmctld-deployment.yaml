@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - slurmctld
-          image: ghcr.io/stackhpc/slurm-docker-cluster:1d4c5af
+          image: ghcr.io/stackhpc/slurm-docker-cluster:5063ece
           name: slurmctld
           ports:
             - containerPort: 6817
@@ -37,9 +37,9 @@ spec:
               name: slurm-jobdir
             - mountPath: /var/log/slurm
               name: var-log-slurm
-    #      - mountPath: /etc/slurm/slurm.conf
-    #        name: slurm-config-volume
-    #        subPath: slurm.conf
+            - mountPath: /etc/slurm/slurm.conf
+              name: slurm-config-volume
+              subPath: slurm.conf
       hostname: slurmctld
       restartPolicy: Always
       volumes:
@@ -50,7 +50,7 @@ spec:
         - name: var-log-slurm
           persistentVolumeClaim:
             claimName: var-log-slurm
-    #  - name: slurm-config-volume
-    #    configMap:
-    #      name: slurm-conf-configmap
+        - name: slurm-config-volume
+          configMap:
+            name: slurm-conf-configmap
 status: {}

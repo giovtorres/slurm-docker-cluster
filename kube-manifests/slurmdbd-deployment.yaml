@@ -31,7 +31,7 @@ spec:
       containers:
         - args:
             - slurmdbd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:1d4c5af
+          image: ghcr.io/stackhpc/slurm-docker-cluster:5063ece
           name: slurmdbd
           ports:
             - containerPort: 6819
@@ -39,9 +39,9 @@ spec:
           volumeMounts:
             - mountPath: /var/log/slurm
               name: var-log-slurm
-      #      - mountPath: /etc/slurm/slurm.conf
-      #        name: slurm-config-volume
-      #        subPath: slurm.conf
+            - mountPath: /etc/slurm/slurm.conf
+              name: slurm-config-volume
+              subPath: slurm.conf
       #      - mountPath: /etc/slurm/slurmdbd.conf
       #        name: dbd-config-volume
       #        subPath: slurmdbd.conf
