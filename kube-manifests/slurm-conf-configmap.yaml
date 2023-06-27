@@ -22,7 +22,7 @@ data:
     SlurmctldPidFile=/var/run/slurmd/slurmctld.pid
     SlurmdPidFile=/var/run/slurmd/slurmd.pid
     ProctrackType=proctrack/linuxproc
-    ReturnToService=0
+    ReturnToService=2
     #
     # TIMERS
     SlurmctldTimeout=300
@@ -36,7 +36,6 @@ data:
     SchedulerType=sched/backfill
     SelectType=select/cons_tres
     SelectTypeParameters=CR_CPU_Memory
-    FastSchedule=1
     #
     # LOGGING
     SlurmctldDebug=3
