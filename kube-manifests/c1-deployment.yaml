@@ -27,15 +27,15 @@ spec:
       containers:
         - args:
             - slurmd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:f678ed5
+          image: ghcr.io/stackhpc/slurm-docker-cluster:5063ece
           name: c1
           ports:
             - containerPort: 6818
           resources: {}
           volumeMounts:
-          #  - mountPath: /etc/slurm/slurm.conf
-          #    name: slurm-config-volume
-          #    subPath: slurm.conf
+            - mountPath: /etc/slurm/slurm.conf
+              name: slurm-config-volume
+              subPath: slurm.conf
             - mountPath: /data
               name: slurm-jobdir
       hostname: c1
@@ -47,7 +47,7 @@ spec:
             path: /exports/k8s-nfs
           #persistentVolumeClaim:
           #  claimName: slurm-jobdir
-        #- name: slurm-config-volume
-        #  configMap:
-        #    name: slurm-conf-configmap
+        - name: slurm-config-volume
+          configMap:
+            name: slurm-conf-configmap
 status: {}

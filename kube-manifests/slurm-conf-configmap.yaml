@@ -98,5 +98,3 @@ data:
     #
     # PARTITIONS
     PartitionName=normal Default=yes Nodes=c[1-2] Priority=50 DefMemPerCPU=500 Shared=NO MaxNodes=2 MaxTime=5-00:00:00 DefaultTime=5-00:00:00 State=UP
-
-    SlurmctldParameters=enable_configless
