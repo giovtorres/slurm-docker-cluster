@@ -84,7 +84,6 @@ RUN mkdir /etc/sysconfig/slurm \
     && chown -R slurm:slurm /var/*/slurm* \
     && /sbin/create-munge-key
 
-COPY slurm.conf /etc/slurm/slurm.conf
 COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
 RUN set -x \
     && chown slurm:slurm /etc/slurm/slurmdbd.conf \
