@@ -37,8 +37,6 @@ spec:
             - containerPort: 6819
           resources: {}
           volumeMounts:
-            - mountPath: /var/log/slurm
-              name: var-log-slurm
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
               subPath: slurm.conf
@@ -56,9 +54,6 @@ spec:
       hostname: slurmdbd
       restartPolicy: Always
       volumes:
-        - name: var-log-slurm
-          persistentVolumeClaim:
-            claimName: var-log-slurm
         - name: dbd-config-volume
           configMap:
             name: slurmdbd-conf-configmap
