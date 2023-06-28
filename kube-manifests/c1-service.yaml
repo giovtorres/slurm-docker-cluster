@@ -1,12 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    kompose.cmd: kompose convert
-    kompose.version: 1.26.0 (40646f47)
   creationTimestamp: null
   labels:
-    io.kompose.service: c1
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: slurmd
+    app.kubernetes.io/part-of: slurm-docker-cluster
   name: c1
 spec:
   ports:
@@ -14,6 +13,8 @@ spec:
       port: 6818
       targetPort: 6818
   selector:
-    io.kompose.service: c1
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: slurmd
+    app.kubernetes.io/part-of: slurm-docker-cluster
 status:
   loadBalancer: {}
