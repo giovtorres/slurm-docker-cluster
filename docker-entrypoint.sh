@@ -68,6 +68,11 @@ then
     echo "---> Starting the MUNGE Authentication service (munged) ..."
     gosu munge /usr/sbin/munged
     echo "---> Munge Successfully Authenticated"
+
+    while true;
+    do
+      sleep 600
+    done
 fi
 
 exec "$@"
