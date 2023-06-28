@@ -63,4 +63,11 @@ then
     exec /usr/sbin/slurmd -Z -Dvvv
 fi
 
+if [ "$1" = "login" ]
+then
+    echo "---> Starting the MUNGE Authentication service (munged) ..."
+    gosu munge /usr/sbin/munged
+    echo "---> Munge Successfully Authenticated"
+fi
+
 exec "$@"
