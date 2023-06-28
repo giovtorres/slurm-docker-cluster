@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/name: slurm
     app.kubernetes.io/component: slurmd
     app.kubernetes.io/part-of: slurm-docker-cluster
-  name: c1
+  name: slurmd
 spec:
   replicas: 2
   selector:
@@ -28,7 +28,7 @@ spec:
         - args:
             - slurmd
           image: ghcr.io/stackhpc/slurm-docker-cluster:4e1b01f
-          name: c1
+          name: slurmd
           ports:
             - containerPort: 6818
           resources: {}
