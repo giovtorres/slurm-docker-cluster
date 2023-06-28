@@ -35,6 +35,7 @@ RUN set -ex \
        vim-enhanced \
        http-parser-devel \
        json-c-devel \
+       mpitests-openmpi \
     && yum clean all \
     && rm -rf /var/cache/yum
 
