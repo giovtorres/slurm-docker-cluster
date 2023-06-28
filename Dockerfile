@@ -84,11 +84,6 @@ RUN mkdir /etc/sysconfig/slurm \
         /var/lib/slurmd/fed_mgr_state \
     && chown -R slurm:slurm /var/*/slurm*
 
-COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
-RUN set -x \
-    && chown slurm:slurm /etc/slurm/slurmdbd.conf \
-    && chmod 600 /etc/slurm/slurmdbd.conf
-
 VOLUME /etc/slurm
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

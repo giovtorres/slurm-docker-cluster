@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+cp /tempmounts/munge.key /etc/munge/munge.key
+chown 998:998 /etc/munge/munge.key
+
 if [ "$1" = "slurmdbd" ]
 then
     echo "---> Starting the MUNGE Authentication service (munged) ..."
@@ -8,6 +11,7 @@ then
 
     echo "---> Starting the Slurm Database Daemon (slurmdbd) ..."
 
+    cp /tempmounts/slurmdbd.conf /etc/slurm/slurmdbd.conf
     chown slurm:slurm /etc/slurm/slurmdbd.conf
     chmod 600 /etc/slurm/slurmdbd.conf
     {
