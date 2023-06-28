@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - login
-          image: ghcr.io/stackhpc/slurm-docker-cluster:84e78ae
+          image: ghcr.io/stackhpc/slurm-docker-cluster:dbb050d
           name: login
           ports:
             - containerPort: 8081
@@ -37,6 +37,9 @@ spec:
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
               subPath: slurm.conf
+            - mountPath: /tempmounts/munge.key
+              name: munge-key-secret
+              subPath: munge.key
           resources: {}
       hostname: login
       restartPolicy: Always
@@ -48,4 +51,7 @@ spec:
         - name: slurm-config-volume
           configMap:
             name: slurm-conf-configmap
+        - name: munge-key-secret
+          secret:
+            secretName: munge-key-secret
 status: {}

@@ -31,7 +31,7 @@ spec:
       containers:
         - args:
             - slurmdbd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:84e78ae
+          image: ghcr.io/stackhpc/slurm-docker-cluster:dbb050d
           name: slurmdbd
           ports:
             - containerPort: 6819
@@ -40,9 +40,12 @@ spec:
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
               subPath: slurm.conf
-      #      - mountPath: /etc/slurm/slurmdbd.conf
-      #        name: dbd-config-volume
-      #        subPath: slurmdbd.conf
+            - mountPath: /tempmounts/munge.key
+              name: munge-key-secret
+              subPath: munge.key
+            - mountPath: /tempmounts/slurmdbd.conf
+              name: dbd-config-volume
+              subPath: slurmdbd.conf
       #initContainers:
       #  - name: init-perms-set
       #    image: busybox
@@ -57,8 +60,10 @@ spec:
         - name: dbd-config-volume
           configMap:
             name: slurmdbd-conf-configmap
-            defaultMode: 384
         - name: slurm-config-volume
           configMap:
             name: slurm-conf-configmap
+        - name: munge-key-secret
+          secret:
+            secretName: munge-key-secret
 status: {}
