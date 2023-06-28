@@ -82,8 +82,7 @@ RUN mkdir /etc/sysconfig/slurm \
         /var/lib/slurmd/assoc_usage \
         /var/lib/slurmd/qos_usage \
         /var/lib/slurmd/fed_mgr_state \
-    && chown -R slurm:slurm /var/*/slurm* \
-    && /sbin/create-munge-key
+    && chown -R slurm:slurm /var/*/slurm*
 
 COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
 RUN set -x \
