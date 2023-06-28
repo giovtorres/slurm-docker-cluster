@@ -66,13 +66,7 @@ fi
 if [ "$1" = "login" ]
 then
     echo "---> Starting the MUNGE Authentication service (munged) ..."
-    gosu munge /usr/sbin/munged
-    echo "---> Munge Successfully Authenticated"
-
-    while true;
-    do
-      sleep 600
-    done
+    gosu munge /usr/sbin/munged -F
 fi
 
 exec "$@"
