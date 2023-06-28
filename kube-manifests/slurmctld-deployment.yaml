@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - slurmctld
-          image: ghcr.io/stackhpc/slurm-docker-cluster:d68068c
+          image: ghcr.io/stackhpc/slurm-docker-cluster:4e1b01f
           name: slurmctld
           ports:
             - containerPort: 6817
