@@ -4,15 +4,15 @@ metadata:
   creationTimestamp: null
   labels:
     app.kubernetes.io/name: slurm
-    app.kubernetes.io/component: slurmd
+    app.kubernetes.io/component: login
     app.kubernetes.io/part-of: slurm-docker-cluster
-  name: slurmd
+  name: login
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: slurm
-      app.kubernetes.io/component: slurmd
+      app.kubernetes.io/component: login
       app.kubernetes.io/part-of: slurm-docker-cluster
   strategy:
     type: Recreate
@@ -21,31 +21,30 @@ spec:
       creationTimestamp: null
       labels:
         app.kubernetes.io/name: slurm
-        app.kubernetes.io/component: slurmd
+        app.kubernetes.io/component: login
         app.kubernetes.io/part-of: slurm-docker-cluster
     spec:
       containers:
         - args:
-            - slurmd
+            - login
           image: ghcr.io/stackhpc/slurm-docker-cluster:84e78ae
-          name: slurmd
+          name: login
           ports:
-            - containerPort: 6818
-          resources: {}
+            - containerPort: 8081
           volumeMounts:
+            - mountPath: /data
+              name: slurm-jobdir
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
               subPath: slurm.conf
-            - mountPath: /data
-              name: slurm-jobdir
+          resources: {}
+      hostname: login
       restartPolicy: Always
       volumes:
         - name: slurm-jobdir
           nfs:
             server: 172.20.37.208
             path: /exports/k8s-nfs
-          #persistentVolumeClaim:
-          #  claimName: slurm-jobdir
         - name: slurm-config-volume
           configMap:
             name: slurm-conf-configmap
