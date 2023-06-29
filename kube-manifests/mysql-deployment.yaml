@@ -29,11 +29,17 @@ spec:
             - name: MYSQL_DATABASE
               value: slurm_acct_db
             - name: MYSQL_PASSWORD
-              value: password
+              valueFrom:
+                secretKeyRef:
+                  name: database-auth-secret
+                  key: password
             - name: MYSQL_RANDOM_ROOT_PASSWORD
               value: "yes"
             - name: MYSQL_USER
-              value: slurm
+              valueFrom:
+                secretKeyRef:
+                  name: database-auth-secret
+                  key: username
           image: mariadb:10.10
           name: mysql
           ports:

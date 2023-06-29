@@ -34,7 +34,7 @@ spec:
       containers:
         - args:
             - slurmdbd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:dbb050d
+          image: ghcr.io/stackhpc/slurm-docker-cluster:e50ea34
           name: slurmdbd
           ports:
             - containerPort: 6819
@@ -49,6 +49,17 @@ spec:
             - mountPath: /tempmounts/slurmdbd.conf
               name: dbd-config-volume
               subPath: slurmdbd.conf
+          env:
+            - name: StorageUser
+              valueFrom:
+                secretKeyRef:
+                  name: database-auth-secret
+                  key: username
+            - name: StoragePass
+              valueFrom:
+                secretKeyRef:
+                  name: database-auth-secret
+                  key: password
       #initContainers:
       #  - name: init-perms-set
       #    image: busybox

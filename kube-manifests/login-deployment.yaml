@@ -29,7 +29,7 @@ spec:
       containers:
         - args:
             - login
-          image: ghcr.io/stackhpc/slurm-docker-cluster:dbb050d
+          image: ghcr.io/stackhpc/slurm-docker-cluster:e50ea34
           name: login
           ports:
             - containerPort: 8081
