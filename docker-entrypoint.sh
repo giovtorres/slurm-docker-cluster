@@ -75,7 +75,7 @@ then
     echo "---> Starting the MUNGE Authentication service (munged) ..."
     cd /home
     for DIR in */;
-    USER=$( echo $DIR | sed "s/.$//" )
+    source USER=$( echo $DIR | sed "s/.$//" )
     do (chown -R $USER $USER:$USER || echo "Failed to take ownership of $USER") && (chmod 600 /home/$USER/.ssh/authorized_keys || echo "Couldn't set permissions for .ssh keys for $USER");
     done
     gosu munge /usr/sbin/munged
