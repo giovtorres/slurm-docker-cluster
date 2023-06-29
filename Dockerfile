@@ -36,6 +36,7 @@ RUN set -ex \
        http-parser-devel \
        json-c-devel \
        mpitests-openmpi \
+       openssh-server \
     && yum clean all \
     && rm -rf /var/cache/yum
 
@@ -63,7 +64,9 @@ RUN set -x \
     && popd \
     && rm -rf slurm \
     && groupadd -r --gid=990 slurm \
-    && useradd -r -g slurm --uid=990 slurm
+    && useradd -r -g slurm --uid=990 slurm \
+    && groupadd --gid=1000 rocky \
+    && useradd -g rocky --uid=1000 rocky
 
 RUN mkdir /etc/sysconfig/slurm \
         /var/spool/slurmd \
