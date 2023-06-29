@@ -73,11 +73,11 @@ fi
 if [ "$1" = "login" ]
 then
     echo "---> Starting the MUNGE Authentication service (munged) ..."
-    exec service ssh start
     for USER in /home/*;
     do (chown -R $USER $USER:$USER || echo "Failed to take ownership of $USER") && (chmod 600 /home/$USER/.ssh/authorized_keys || echo "Couldn't set permissions for .ssh keys for $USER");
     done
-    gosu munge /usr/sbin/munged -F
+    gosu munge /usr/sbin/munged
+    /usr/sbin/sshd -D
 fi
 
 exec "$@"
