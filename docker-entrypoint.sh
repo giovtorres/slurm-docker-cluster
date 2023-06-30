@@ -79,7 +79,9 @@ then
     echo "---> Setting permissions for user home directories"
     cd /home
     for DIR in */;
-    do USER=$( echo $DIR | sed "s/.$//" ) && (chown -R $USER:$USER $USER || echo "Failed to take ownership of $USER") && (chmod 600 /home/$USER/.ssh/authorized_keys || echo "Couldn't set permissions for .ssh keys for $USER");
+    do USER=$( echo $DIR | sed "s/.$//" ) && (chown -R $USER:$USER $USER || echo "Failed to take ownership of $USER") \
+     && (chmod 700 /home/$USER/.ssh || echo "Couldn't set permissions for .ssh directory for $USER") \
+     && (chmod 600 /home/$USER/.ssh/authorized_keys || echo "Couldn't set permissions for .ssh/authorized_keys for $USER");
     done
     echo "---> Complete"
     echo "Starting sshd"
