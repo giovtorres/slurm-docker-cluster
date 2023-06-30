@@ -83,7 +83,7 @@ then
     echo "---> Complete"
     echo "Starting sshd"
     ssh-keygen -A
-    /usr/sbin/sshd -d
+    /usr/sbin/sshd
 
     echo "---> Starting the MUNGE Authentication service (munged) ..."
     gosu munge /usr/sbin/munged -F
