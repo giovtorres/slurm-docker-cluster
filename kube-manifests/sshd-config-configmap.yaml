@@ -6,3 +6,5 @@ data:
   sshd_config: |
     PasswordAuthentication no
     ChallengeResponseAuthentication no
+    ClientAliveInterval 600
+    ClientAliveCountMax 1

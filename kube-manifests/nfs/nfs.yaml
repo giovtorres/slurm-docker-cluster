@@ -39,16 +39,10 @@ spec:
         volumeMounts:
         - name: storage
           mountPath: /exports
-        - name: authorized-keys
-          mountPath: /exports/home/rocky/.ssh/authorized_keys
-          subPath: authorized_keys
       volumes:
       - name: storage
         persistentVolumeClaim:
           claimName: nfs-server-volume
-      - name: authorized-keys
-        configMap:
-          name: authorized-keys-configmap
 #---
 #apiVersion: v1
 #kind: Service

@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - slurmctld
-          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
+          image: ghcr.io/stackhpc/slurm-docker-cluster:550389b
           name: slurmctld
           ports:
             - containerPort: 6817
@@ -48,7 +48,7 @@ spec:
       volumes:
         - name: slurm-jobdir
           nfs:
-            server: 172.20.37.219
+            server: 172.20.37.223
             path: /exports/home
         #- name: var-log-slurm
         #  persistentVolumeClaim:

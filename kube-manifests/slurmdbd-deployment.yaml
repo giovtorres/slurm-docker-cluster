@@ -31,7 +31,7 @@ spec:
       containers:
         - args:
             - slurmdbd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
+          image: ghcr.io/stackhpc/slurm-docker-cluster:550389b
           name: slurmdbd
           ports:
             - containerPort: 6819

@@ -27,8 +27,7 @@ spec:
       containers:
         - args:
             - login
-          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
-
+          image: ghcr.io/stackhpc/slurm-docker-cluster:550389b
           name: login
           ports:
             - containerPort: 22
@@ -44,13 +43,16 @@ spec:
             - mountPath: /etc/ssh/sshd_config
               subPath: sshd_config
               name: sshd-config-configmap
+            - name: authorized-keys
+              mountPath: /tempmounts/authorized_keys
+              subPath: authorized_keys
           resources: {}
       hostname: login
       restartPolicy: Always
       volumes:
         - name: slurm-jobdir
           nfs:
-            server: 172.20.37.219
+            server: 172.20.37.223
             path: /exports/home
         - name: slurm-config-volume
           configMap:
@@ -61,4 +63,7 @@ spec:
         - name: munge-key-secret
           secret:
             secretName: munge-key-secret
+        - name: authorized-keys
+          configMap:
+            name: authorized-keys-configmap
 status: {}

@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - slurmd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
+          image: ghcr.io/stackhpc/slurm-docker-cluster:550389b
           name: slurmd
           ports:
             - containerPort: 6818
@@ -45,7 +45,7 @@ spec:
       volumes:
         - name: slurm-jobdir
           nfs:
-            server: 172.20.37.219
+            server: 172.20.37.223
             path: /exports/home
         - name: slurm-config-volume
           configMap:
