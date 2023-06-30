@@ -73,10 +73,9 @@ fi
 if [ "$1" = "login" ]
 then
 
-    mkdir /home/rocky
     mkdir /home/rocky/.ssh
     cp tempmounts/authorized_keys /home/rocky/.ssh/authorized_keys
-    
+
     echo "---> Setting permissions for user home directories"
     cd /home
     for DIR in */;
