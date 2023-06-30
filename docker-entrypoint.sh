@@ -72,9 +72,6 @@ fi
 
 if [ "$1" = "login" ]
 then
-    echo "---> Starting the MUNGE Authentication service (munged) ..."
-    gosu munge /usr/sbin/munged
-    echo "---> MUNGE Complete"
 
     echo "---> Setting permissions for user home directories"
     cd /home
@@ -85,8 +82,11 @@ then
     done
     echo "---> Complete"
     echo "Starting sshd"
-    ssh-keygen -A
-    /usr/sbin/sshd -D -d
+    /usr/sbin/sshd -d
+
+    echo "---> Starting the MUNGE Authentication service (munged) ..."
+    gosu munge /usr/sbin/munged -F
+    echo "---> MUNGE Complete"
 fi
 
 exec "$@"
