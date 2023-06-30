@@ -66,7 +66,8 @@ RUN set -x \
     && groupadd -r --gid=990 slurm \
     && useradd -r -g slurm --uid=990 slurm \
     && groupadd --gid=1000 rocky \
-    && useradd -g rocky --uid=1000 rocky
+    && useradd -g rocky --uid=1000 rocky \
+    && usermod -p '*' rocky
 
 RUN mkdir /etc/sysconfig/slurm \
         /var/spool/slurmd \
