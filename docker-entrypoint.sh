@@ -86,7 +86,7 @@ then
     echo "---> Complete"
     echo "Starting sshd"
     ssh-keygen -A
-    /usr/sbin/sshd -D
+    /usr/sbin/sshd -D -d
 fi
 
 exec "$@"
