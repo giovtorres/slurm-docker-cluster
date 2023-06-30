@@ -27,13 +27,13 @@ spec:
       containers:
         - args:
             - slurmctld
-          image: ghcr.io/stackhpc/slurm-docker-cluster:e50ea34
+          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
           name: slurmctld
           ports:
             - containerPort: 6817
           resources: {}
           volumeMounts:
-            - mountPath: /data
+            - mountPath: /home
               name: slurm-jobdir
             #- mountPath: /var/log/slurm
             #  name: var-log-slurm
@@ -48,8 +48,8 @@ spec:
       volumes:
         - name: slurm-jobdir
           nfs:
-            server: 172.20.37.208
-            path: /exports/k8s-nfs
+            server: 172.20.37.219
+            path: /exports/home
         #- name: var-log-slurm
         #  persistentVolumeClaim:
         #    claimName: var-log-slurm

@@ -27,7 +27,7 @@ spec:
       containers:
         - args:
             - slurmd
-          image: ghcr.io/stackhpc/slurm-docker-cluster:e50ea34
+          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
           name: slurmd
           ports:
             - containerPort: 6818
@@ -36,7 +36,7 @@ spec:
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
               subPath: slurm.conf
-            - mountPath: /data
+            - mountPath: /home
               name: slurm-jobdir
             - mountPath: /tempmounts/munge.key
               name: munge-key-secret
@@ -45,10 +45,8 @@ spec:
       volumes:
         - name: slurm-jobdir
           nfs:
-            server: 172.20.37.208
-            path: /exports/k8s-nfs
-          #persistentVolumeClaim:
-          #  claimName: slurm-jobdir
+            server: 172.20.37.219
+            path: /exports/home
         - name: slurm-config-volume
           configMap:
             name: slurm-conf-configmap

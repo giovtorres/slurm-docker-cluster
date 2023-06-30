@@ -27,12 +27,13 @@ spec:
       containers:
         - args:
             - login
-          image: ghcr.io/stackhpc/slurm-docker-cluster:e50ea34
+          image: ghcr.io/stackhpc/slurm-docker-cluster:631b578
+
           name: login
           ports:
-            - containerPort: 8081
+            - containerPort: 22
           volumeMounts:
-            - mountPath: /data
+            - mountPath: /home
               name: slurm-jobdir
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
@@ -40,17 +41,23 @@ spec:
             - mountPath: /tempmounts/munge.key
               name: munge-key-secret
               subPath: munge.key
+            - mountPath: /etc/ssh/sshd_config
+              subPath: sshd_config
+              name: sshd-config-configmap
           resources: {}
       hostname: login
       restartPolicy: Always
       volumes:
         - name: slurm-jobdir
           nfs:
-            server: 172.20.37.208
-            path: /exports/k8s-nfs
+            server: 172.20.37.219
+            path: /exports/home
         - name: slurm-config-volume
           configMap:
             name: slurm-conf-configmap
+        - name: sshd-config-configmap
+          configMap:
+            name: sshd-config-configmap
         - name: munge-key-secret
           secret:
             secretName: munge-key-secret
