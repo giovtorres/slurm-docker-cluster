@@ -72,8 +72,9 @@ fi
 
 if [ "$1" = "login" ]
 then
-
-    mkdir /home/rocky/.ssh
+    
+    mkdir /home/rocky || true
+    mkdir /home/rocky/.ssh || true
     cp tempmounts/authorized_keys /home/rocky/.ssh/authorized_keys
 
     echo "---> Setting permissions for user home directories"
