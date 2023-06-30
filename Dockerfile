@@ -62,12 +62,7 @@ RUN set -x \
     && make install \
     && install -D -m644 contribs/slurm_completion_help/slurm_completion.sh /etc/profile.d/slurm_completion.sh \
     && popd \
-    && rm -rf slurm \
-    && groupadd -r --gid=990 slurm \
-    && useradd -r -g slurm --uid=990 slurm \
-    && groupadd --gid=1000 rocky \
-    && useradd -g rocky --uid=1000 rocky \
-    && usermod -p '*' rocky
+    && rm -rf slurm
 
 RUN mkdir /etc/sysconfig/slurm \
         /var/spool/slurmd \
@@ -86,7 +81,12 @@ RUN mkdir /etc/sysconfig/slurm \
         /var/lib/slurmd/assoc_usage \
         /var/lib/slurmd/qos_usage \
         /var/lib/slurmd/fed_mgr_state \
-    && chown -R slurm:slurm /var/*/slurm*
+    && groupadd -r --gid=990 slurm \
+    && useradd -r -g slurm --uid=990 slurm \
+    && chown -R slurm:slurm /var/*/slurm* \
+    && groupadd --gid=1000 rocky \
+    && useradd -g rocky --uid=1000 rocky \
+    && usermod -p '*' rocky
 
 VOLUME /etc/slurm
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
