@@ -9,7 +9,7 @@ spec:
   storageClassName: csi-cinder
   resources:
     requests:
-      storage: 10Gi
+      storage: {{ .Values.nfs.storage }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
       - name: nfs-server
-        image: k8s.gcr.io/volume-nfs:0.8
+        image: k8s.gcr.io/volume-nfs:{{ .Values.nfs.version }}
         ports:
         - name: nfs
           containerPort: 2049

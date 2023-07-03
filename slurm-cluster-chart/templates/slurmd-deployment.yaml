@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/part-of: slurm-docker-cluster
   name: slurmd
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicas.slurmd }}
   selector:
     matchLabels:
       app.kubernetes.io/name: slurm

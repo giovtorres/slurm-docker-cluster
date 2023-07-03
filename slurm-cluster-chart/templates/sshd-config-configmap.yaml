@@ -4,7 +4,4 @@ metadata:
   name: {{ .Values.configmaps.sshdConfig }}
 data:
   sshd_config: |
-    PasswordAuthentication no
-    ChallengeResponseAuthentication no
-    ClientAliveInterval 600
-    ClientAliveCountMax 1
+    {{- .Files.Get "files/sshd_config" | nindent 4 -}}
