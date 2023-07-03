@@ -36,7 +36,7 @@ spec:
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
               subPath: slurm.conf
-            - mountPath: /home
+            - mountPath: {{ .Values.sharedDirectory.mountPath }}
               name: slurm-jobdir
             - mountPath: /tempmounts/munge.key
               name: munge-key-secret

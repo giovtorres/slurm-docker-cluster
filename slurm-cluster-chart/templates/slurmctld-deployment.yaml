@@ -33,7 +33,7 @@ spec:
             - containerPort: 6817
           resources: {}
           volumeMounts:
-            - mountPath: /home
+            - mountPath: {{ .Values.sharedDirectory.mountPath }}
               name: slurm-jobdir
             #- mountPath: /var/log/slurm
             #  name: var-log-slurm

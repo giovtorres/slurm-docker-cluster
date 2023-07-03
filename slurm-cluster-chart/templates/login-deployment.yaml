@@ -32,7 +32,7 @@ spec:
           ports:
             - containerPort: 22
           volumeMounts:
-            - mountPath: /home
+            - mountPath: {{ .Values.sharedDirectory.mountPath }}
               name: slurm-jobdir
             - mountPath: /etc/slurm/slurm.conf
               name: slurm-config-volume
