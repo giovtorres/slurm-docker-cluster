@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configmaps.sshdConfig }}
+data:
+  sshd_config: |
+    PasswordAuthentication no
+    ChallengeResponseAuthentication no
+    ClientAliveInterval 600
+    ClientAliveCountMax 1

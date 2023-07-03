@@ -1,0 +1,16 @@
+sdcImage: ghcr.io/stackhpc/slurm-docker-cluster:550389b
+
+nfs:
+  server: 172.20.37.243
+  path: /exports/home
+
+configmaps:
+  authorizedKeys: authorized-keys-configmap
+  slurmConf: slurm-conf-configmap
+  slurmdbdConf: slurmdbd-conf-configmap
+  sshdConfig: sshd-config-configmap
+
+secrets:
+  databaseAuth: database-auth-secret
+  mungeKey: munge-key-secret
+  

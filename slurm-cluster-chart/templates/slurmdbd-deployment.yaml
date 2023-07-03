@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: slurmdbd
+    app.kubernetes.io/part-of: slurm-docker-cluster
+  name: slurmdbd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slurm
+      app.kubernetes.io/component: slurmdbd
+      app.kubernetes.io/part-of: slurm-docker-cluster
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/name: slurm
+        app.kubernetes.io/component: slurmdbd
+        app.kubernetes.io/part-of: slurm-docker-cluster
+    spec:
+      securityContext: 
+      #  runAsUser: 990
+      #  runAsGroup: 990
+      #  fsGroup: 990
+      containers:
+        - args:
+            - slurmdbd
+          image: {{ .Values.sdcImage }}
+          name: slurmdbd
+          ports:
+            - containerPort: 6819
+          resources: {}
+          volumeMounts:
+            - mountPath: /etc/slurm/slurm.conf
+              name: slurm-config-volume
+              subPath: slurm.conf
+            - mountPath: /tempmounts/munge.key
+              name: munge-key-secret
+              subPath: munge.key
+            - mountPath: /tempmounts/slurmdbd.conf
+              name: dbd-config-volume
+              subPath: slurmdbd.conf
+          env:
+            - name: StorageUser
+              valueFrom:
+                secretKeyRef:
+                  name: database-auth-secret
+                  key: username
+            - name: StoragePass
+              valueFrom:
+                secretKeyRef:
+                  name: database-auth-secret
+                  key: password
+      #initContainers:
+      #  - name: init-perms-set
+      #    image: busybox
+      #    command: ["sh", "-c", "addgroup --system --gid=990 slurm; adduser --system -G slurm --uid=990 slurm && chown slurm:slurm /etc/slurm/slurmdbd.conf"]
+      #    volumeMounts:
+      #      - mountPath: /etc/slurm/slurmdbd.conf
+      #        name: dbd-config-volume
+      #        subPath: slurmdbd.conf
+      hostname: slurmdbd
+      restartPolicy: Always
+      volumes:
+        - name: dbd-config-volume
+          configMap:
+            name: {{ .Values.configmaps.slurmdbdConf }}
+        - name: slurm-config-volume
+          configMap:
+            name: {{ .Values.configmaps.slurmConf }}
+        - name: munge-key-secret
+          secret:
+            secretName: {{ .Values.secrets.mungeKey }}
+status: {}

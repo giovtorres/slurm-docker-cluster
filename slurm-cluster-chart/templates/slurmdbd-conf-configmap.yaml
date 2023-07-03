@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configmaps.slurmdbdConf }}
+data:
+  slurmdbd.conf: |
+    #
+    # Example slurmdbd.conf file.
+    #
+    # See the slurmdbd.conf man page for more information.
+    #
+    # Authentication info
+    AuthType=auth/munge
+    #
+    # slurmDBD info
+    DbdAddr=slurmdbd
+    DbdHost=slurmdbd
+    SlurmUser=slurm
+    DebugLevel=4
+    LogFile=/var/log/slurm/slurmdbd.log
+    PidFile=/var/run/slurmdbd/slurmdbd.pid
+    #
+    # Database info
+    StorageType=accounting_storage/mysql
+    StorageHost=mysql

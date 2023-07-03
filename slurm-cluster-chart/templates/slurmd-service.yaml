@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: slurmd
+    app.kubernetes.io/part-of: slurm-docker-cluster
+  name: slurmd
+spec:
+  ports:
+    - name: "6818"
+      port: 6818
+      targetPort: 6818
+  selector:
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: slurmd
+    app.kubernetes.io/part-of: slurm-docker-cluster
+status:
+  loadBalancer: {}
