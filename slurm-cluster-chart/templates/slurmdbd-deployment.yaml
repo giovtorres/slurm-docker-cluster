@@ -47,11 +47,6 @@ spec:
               name: dbd-config-volume
               subPath: slurmdbd.conf
           env:
-            - name: StorageUser
-              valueFrom:
-                secretKeyRef:
-                  name: database-auth-secret
-                  key: username
             - name: StoragePass
               valueFrom:
                 secretKeyRef:

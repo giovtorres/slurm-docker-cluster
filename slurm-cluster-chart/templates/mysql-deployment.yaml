@@ -30,10 +30,7 @@ spec:
             - name: MYSQL_RANDOM_ROOT_PASSWORD
               value: "yes"
             - name: MYSQL_USER
-              valueFrom:
-                secretKeyRef:
-                  name: database-auth-secret
-                  key: username
+              value: "slurm"
           image: {{ .Values.sqlImage }}
           name: mysql
           ports:

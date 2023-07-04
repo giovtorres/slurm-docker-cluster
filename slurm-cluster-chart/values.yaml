@@ -1,4 +1,4 @@
-sdcImage: ghcr.io/stackhpc/slurm-docker-cluster:550389b
+sdcImage: ghcr.io/stackhpc/slurm-docker-cluster:16a577f
 
 replicas:
   slurmd: 2
@@ -13,7 +13,6 @@ nfs:
 sqlImage: mariadb:10.10
 
 databaseAuthentication:
-  username: slurm
   password: password
 
 databaseStorage: 100Mi
