@@ -5,7 +5,7 @@ replicas:
   login: 1
 
 nfs:
-  server: 172.20.37.248
+  server: 172.20.37.231
   path: /exports
   version: 0.8
   storage: 10Gi
