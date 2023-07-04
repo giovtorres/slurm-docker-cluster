@@ -57,7 +57,7 @@ RUN set -ex \
 RUN set -x \
     && git clone -b ${SLURM_TAG} --single-branch --depth=1 https://github.com/SchedMD/slurm.git \
     && pushd slurm \
-    && ./configure --enable-debug --prefix=/usr --sysconfdir=/etc/slurm --with-pmix=/usr/lib64/pmix \
+    && ./configure --enable-debug --prefix=/usr --sysconfdir=/etc/slurm --with-pmix=/usr/lib64 \
         --with-mysql_config=/usr/bin  --libdir=/usr/lib64 \
     && make install \
     && install -D -m644 contribs/slurm_completion_help/slurm_completion.sh /etc/profile.d/slurm_completion.sh \
