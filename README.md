@@ -82,7 +82,6 @@ Example job scripts:
 
 #SBATCH -N 2
 #SBATCH --ntasks-per-node=1
-#SBATCH -o output.txt
 
 echo $SLURM_JOB_ID: $SLURM_JOB_NODELIST
 srun /usr/lib64/openmpi/bin/mpitests-IMB-MPI1 pingpong
@@ -93,12 +92,11 @@ srun /usr/lib64/openmpi/bin/mpitests-IMB-MPI1 pingpong
 
 #SBATCH -N 2
 #SBATCH --ntasks-per-node=1
-#SBATCH -o output.txt
 
 echo $SLURM_JOB_ID: $SLURM_JOB_NODELIST
-/usr/lib64/openmpi/bin/mpirun --prefix /usr/lib64/openmpi --allow-run-as-root mpitests-IMB-MPI1 pingpong
+/usr/lib64/openmpi/bin/mpirun --prefix /usr/lib64/openmpi mpitests-IMB-MPI1 pingpong
 ```
-
+Note: The mpirun script assumes you are running as user 'rocky'. If you are running as root, you will need to include the --allow-run-as-root argument
 ## Reconfiguring the Cluster
 
 To guarantee changes to config files are propagated to the cluster, use
