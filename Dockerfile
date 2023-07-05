@@ -36,6 +36,9 @@ RUN set -ex \
        http-parser-devel \
        json-c-devel \
        mpitests-openmpi \
+       pmix-devel \
+       hwloc \
+       hwloc-devel \
        openssh-server \
     && yum clean all \
     && rm -rf /var/cache/yum
