@@ -31,7 +31,7 @@ The compose file will create the following named volumes:
 
 ## Configuring the Cluster
 
-All config files in `slurm-cluster-chart/files` will be mounted into the container to configure their respective services on startup. The `authorized_keys` file contains authorised public keys for the user `rocky`, add your public key to access the cluster. Note that changes to these files will not be propagated to existing deployments (see Reconfiguring the Cluster).
+All config files in `slurm-cluster-chart/files` will be mounted into the container to configure their respective services on startup. The `authorized_keys` file contains authorised public keys for the user `rocky`, add your public key to access the cluster. Note that changes to these files will not all be propagated to existing deployments (see "Reconfiguring the Cluster").
 Additional parameters can be found in the `values.yaml` file, which will be applied on a Helm chart deployment. Note that some of these values, such as `encodedMungeKey` will also not propagate until the cluster is restarted (see Reconfiguring the Cluster).
 
 ## Deploying the Cluster

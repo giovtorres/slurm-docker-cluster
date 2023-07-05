@@ -3,7 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   creationTimestamp: null
   labels:
-    io.kompose.service: var-lib-mysql
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: mysql
   name: var-lib-mysql
 spec:
   accessModes:

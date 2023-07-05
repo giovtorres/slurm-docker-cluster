@@ -3,20 +3,23 @@ kind: Deployment
 metadata:
   creationTimestamp: null
   labels:
-    io.kompose.service: mysql
+    app.kubernetes.io/name: slurm
+    app.kubernetes.io/component: mysql
   name: mysql
 spec:
   replicas: 1
   selector:
     matchLabels:
-      io.kompose.service: mysql
+      app.kubernetes.io/name: slurm
+      app.kubernetes.io/component: mysql
   strategy:
     type: Recreate
   template:
     metadata:
       creationTimestamp: null
       labels:
-        io.kompose.service: mysql
+        app.kubernetes.io/name: slurm
+        app.kubernetes.io/component: mysql
     spec:
       containers:
         - env:
