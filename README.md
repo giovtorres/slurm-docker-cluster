@@ -72,6 +72,33 @@ PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
 normal*      up 5-00:00:00      2   idle c[1-2]
 ```
 
+## Running MPI Benchmarks
+
+The Intel MPI Benchmarks are included in the containers. These can be run both with mpirun and srun.
+Example job scripts:
+* srun:
+```console
+#!/usr/bin/env bash
+
+#SBATCH -N 2
+#SBATCH --ntasks-per-node=1
+#SBATCH -o output.txt
+
+echo $SLURM_JOB_ID: $SLURM_JOB_NODELIST
+srun /usr/lib64/openmpi/bin/mpitests-IMB-MPI1 pingpong
+```
+* mpirun
+```console
+#!/usr/bin/env bash
+
+#SBATCH -N 2
+#SBATCH --ntasks-per-node=1
+#SBATCH -o output.txt
+
+echo $SLURM_JOB_ID: $SLURM_JOB_NODELIST
+/usr/lib64/openmpi/bin/mpirun --prefix /usr/lib64/openmpi --allow-run-as-root mpitests-IMB-MPI1 pingpong
+```
+
 ## Reconfiguring the Cluster
 
 To guarantee changes to config files are propagated to the cluster, use
