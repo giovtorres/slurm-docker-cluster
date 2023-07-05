@@ -53,6 +53,9 @@ fi
 
 if [ "$1" = "slurmd" ]
 then
+    echo "---> Setting memlock unlimited ..."
+    ulimit -Hl unlimited
+
     echo "---> Starting the MUNGE Authentication service (munged) ..."
     gosu munge /usr/sbin/munged
 
