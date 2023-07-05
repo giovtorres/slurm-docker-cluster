@@ -86,7 +86,8 @@ RUN mkdir /etc/sysconfig/slurm \
     && chown -R slurm:slurm /var/*/slurm* \
     && groupadd --gid=1000 rocky \
     && useradd -g rocky --uid=1000 rocky \
-    && usermod -p '*' rocky
+    && usermod -p '*' rocky \
+    && echo -e "*\thard\tmemlock\tunlimited" >> /etc/security/limits.conf
 
 VOLUME /etc/slurm
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
