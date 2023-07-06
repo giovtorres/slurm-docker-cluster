@@ -12,7 +12,7 @@ ARG GOSU_VERSION=1.11
 RUN set -ex \
     && yum makecache \
     && yum -y update \
-    && yum -y install dnf-plugins-core \
+    && yum -y install dnf-plugins-core epel-release \
     && yum config-manager --set-enabled powertools \
     && yum -y install \
        wget \
@@ -35,11 +35,12 @@ RUN set -ex \
        vim-enhanced \
        http-parser-devel \
        json-c-devel \
-       mpitests-openmpi \
+    #    mpitests-openmpi \
        pmix-devel \
        hwloc \
        hwloc-devel \
        openssh-server \
+       apptainer \
     && yum clean all \
     && rm -rf /var/cache/yum
 
