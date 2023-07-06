@@ -41,6 +41,8 @@ spec:
             - mountPath: /tempmounts/munge.key
               name: munge-key-secret
               subPath: munge.key
+          securityContext:
+            privileged: true
       restartPolicy: Always
       volumes:
         - name: slurm-jobdir
