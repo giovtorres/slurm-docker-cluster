@@ -92,10 +92,12 @@ the `/data` directory when on the **slurmctld** container and then submit a job:
 
 ```console
 [root@slurmctld /]# cd /data/
-[root@slurmctld data]# sbatch --wrap="uptime"
+[root@slurmctld data]# sbatch --wrap="hostname"
 Submitted batch job 2
 [root@slurmctld data]# ls
 slurm-2.out
+[root@slurmctld data]# cat slurm-2.out
+c1
 ```
 
 ## Stopping and Restarting the Cluster
