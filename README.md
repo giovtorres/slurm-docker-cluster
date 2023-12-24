@@ -114,3 +114,15 @@ docker-compose stop
 docker-compose rm -f
 docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
 ```
+## Updating the Cluster
+
+If you want to change the `slurm.conf` or `slurmdbd.conf` file without a rebuilding you can do so by calling
+```console
+./update_slurmfiles.sh slurm.conf slurmdbd.conf
+```
+(or just one of the files).
+The Cluster will automatically be restarted afterwards with
+```console
+docker-compose restart
+```
+This might come in handy if you add or remove a node to your cluster or want to test a new setting.
