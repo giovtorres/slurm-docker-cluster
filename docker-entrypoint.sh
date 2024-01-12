@@ -1,5 +1,11 @@
 #!/bin/bash
-set -e
+set -ex
+
+# fix weird permissions issues
+chown -R munge:munge /etc/munge
+chown -R munge:munge /var/log/munge
+chown slurm:slurm /etc/slurm/slurmdbd.conf
+chown -R slurm:slurm /var/log/slurm
 
 if [ "$1" = "slurmdbd" ]
 then

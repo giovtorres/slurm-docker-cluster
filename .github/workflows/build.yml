@@ -1,0 +1,30 @@
+name: CMake Ubuntu
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build
+      run: ./build.sh
+
+    - uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ secrets.GCHR_USERNAME }}
+        password: ${{ secrets.GCHR_TOKEN }}
+
+    - uses: docker/build-push-action@v5
+      with:
+        push: true
+        tags: ghcr.io/pharchive/phare/slurm-docker-cluster:21.08
