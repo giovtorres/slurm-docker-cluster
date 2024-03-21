@@ -46,11 +46,11 @@ services:
     depends_on:
       - "slurmdbd"
 
-  c1:
+  node001:
     image: slurm-docker-cluster:${IMAGE_TAG:-21.08}
     command: ["slurmd"]
-    hostname: c1
-    container_name: c1
+    hostname: node001
+    container_name: node001
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -61,11 +61,41 @@ services:
     depends_on:
       - "slurmctld"
 
-  c2:
+  node002:
     image: slurm-docker-cluster:${IMAGE_TAG:-21.08}
     command: ["slurmd"]
-    hostname: c2
-    container_name: c2
+    hostname: node002
+    container_name: node002
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+
+  nodebf2a001:
+    image: slurm-docker-cluster:${IMAGE_TAG:-21.08}
+    command: ["slurmd"]
+    hostname: nodebf2a001
+    container_name: nodebf2a001
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+
+  nodebf2a002:
+    image: slurm-docker-cluster:${IMAGE_TAG:-21.08}
+    command: ["slurmd"]
+    hostname: nodebf2a002
+    container_name: nodebf2a002
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm

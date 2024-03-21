@@ -4,15 +4,17 @@ This is a multi-container Slurm cluster using docker-compose.  The compose file
 creates named volumes for persistent storage of MySQL data files as well as
 Slurm state and log directories.
 
-## Containers and Volumes
+## Overview: Containers and Volumes
 
 The compose file will run the following containers:
 
 * mysql
 * slurmdbd
 * slurmctld
-* c1 (slurmd)
-* c2 (slurmd)
+* node001 (slurmd)
+* node002 (slurmd)
+* nodebf2a001 (slurmd)
+* nodebf2a002 (slurmd)
 
 The compose file will create the following named volumes:
 
@@ -22,44 +24,26 @@ The compose file will create the following named volumes:
 * var_lib_mysql     ( -> /var/lib/mysql )
 * var_log_slurm     ( -> /var/log/slurm )
 
-## Building the Docker Image
+## Building the cluster
+
+### Building the Docker Image
 
 Build the image locally:
 
 ```console
-docker build -t slurm-docker-cluster:21.08.6 .
+sudo docker build -t slurm-docker-cluster:21.08.6 .
 ```
 
-Build a different version of Slurm using Docker build args and the Slurm Git
-tag:
-
-```console
-docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.05.2 .
-```
-
-Or equivalently using `docker-compose`:
-
-```console
-SLURM_TAG=slurm-19-05-2-1 IMAGE_TAG=19.05.2 docker-compose build
-```
-
-
-## Starting the Cluster
+### Starting the Cluster
 
 Run `docker-compose` to instantiate the cluster:
 
 ```console
-IMAGE_TAG=19.05.2 docker-compose up -d
+sudo IMAGE_TAG=21.08.6 docker-compose up -d --force-recreate
 ```
 
-## Register the Cluster with SlurmDBD
+### Register the Cluster with SlurmDBD
 
-To register the cluster to the slurmdbd daemon, run the `register_cluster.sh`
-script:
-
-```console
-./register_cluster.sh
-```
 
 > Note: You may have to wait a few seconds for the cluster daemons to become
 > ready before registering the cluster.  Otherwise, you may get an error such
@@ -68,12 +52,23 @@ script:
 > You can check the status of the cluster by viewing the logs: `docker-compose
 > logs -f`
 
+To register the cluster to the slurmdbd daemon, run the `register_cluster.sh`
+script:
+
+```console
+sudo docker exec slurmctld bash -c "/usr/bin/sacctmgr --immediate add cluster name=linux"
+```
+
+```console
+sudo docker-compose restart slurmdbd slurmctld
+```
+
 ## Accessing the Cluster
 
 Use `docker exec` to run a bash shell on the controller container:
 
 ```console
-docker exec -it slurmctld bash
+sudo docker exec -it slurmctld bash
 ```
 
 From the shell, execute slurm commands, for example:
@@ -103,8 +98,8 @@ c1
 ## Stopping and Restarting the Cluster
 
 ```console
-docker-compose stop
-docker-compose start
+sudo docker-compose stop
+sudo docker-compose start
 ```
 
 ## Deleting the Cluster
@@ -112,9 +107,9 @@ docker-compose start
 To remove all containers and volumes, run:
 
 ```console
-docker-compose stop
-docker-compose rm -f
-docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
+sudo docker-compose stop
+sudo docker-compose rm -f
+sudo docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
 ```
 ## Updating the Cluster
 
