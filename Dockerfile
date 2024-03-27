@@ -35,6 +35,9 @@ RUN set -ex \
        vim-enhanced \
        http-parser-devel \
        json-c-devel \
+       lua \
+       lua-devel \
+       lua-libs \
     && yum clean all \
     && rm -rf /var/cache/yum
 
@@ -67,6 +70,8 @@ RUN set -x \
     && groupadd -r --gid=990 slurm \
     && useradd -r -g slurm --uid=990 slurm \
     && mkdir /etc/sysconfig/slurm \
+        /etc/slurm/plugstack.conf.d \
+        /etc/slurm/lua.d/ \
         /var/spool/slurmd \
         /var/run/slurmd \
         /var/run/slurmdbd \
