@@ -1,4 +1,4 @@
-version: "2.2"
+version: "2.3"
 
 services:
   mysql:
@@ -41,6 +41,7 @@ services:
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
+      - /home/gvallee/Projects/slurm/plugins/:/opt/src/
     expose:
       - "6817"
     depends_on:
