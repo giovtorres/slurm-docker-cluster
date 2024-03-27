@@ -5,15 +5,6 @@ path="$2"
 
 set -e
 
-restart=false
-
-for var in "$@"
-do
-    if [ "$var" = "slurmdbd.conf" ] || [ "$var" = "slurm.conf" ]
-    then
-        export SLURM_TMP=$(cat $var)
-        docker exec slurmctld bash -c "echo \"$SLURM_TMP\" >/etc/slurm/\"$var\""
-        restart=true
-    fi
-done
-if $restart; then docker-compose restart; fi
+export CONTENT_TMP=$(cat $file)
+sudo docker exec slurmctld bash -c "echo \"$CONTENT_TMP\" >$path/\"$file\""
+sudo docker-compose restart
