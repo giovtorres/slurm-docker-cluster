@@ -36,6 +36,7 @@ sudo docker build -t slurm-docker-cluster:21.08.6 .
 
 ### Starting the Cluster
 
+First update any system specific paths from the `docker-compose.yml` file to reflect your local configuration.
 Run `docker-compose` to instantiate the cluster:
 
 ```console
@@ -115,11 +116,20 @@ sudo docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_sl
 
 If you want to change the `slurm.conf` or `slurmdbd.conf` file without a rebuilding you can do so by calling
 ```console
-./update_slurmfiles.sh slurm.conf slurmdbd.conf
+sudo ./update_slurmfiles.sh slurm.conf slurmdbd.conf
 ```
 (or just one of the files).
 The Cluster will automatically be restarted afterwards with
 ```console
-docker-compose restart
+sudo docker-compose restart
 ```
 This might come in handy if you add or remove a node to your cluster or want to test a new setting.
+
+# Check the Slurm logs when everything crashes at startup time
+
+If any container exists with an error code, for example because of a bug in a job_submit script, it is possible
+to see the Slurm logs from the host. For instance, to see the slurmctld logs, execute the following command:
+
+```console
+sudo docker run --rm -i -v=slurm-docker-cluster_var_log_slurm:/tmp/slurm  busybox cat /tmp/slurm/slurmctld.log
+```
