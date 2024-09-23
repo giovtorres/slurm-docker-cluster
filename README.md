@@ -1,130 +1,175 @@
 # Slurm Docker Cluster
 
-This is a multi-container Slurm cluster using docker-compose.  The compose file
-creates named volumes for persistent storage of MySQL data files as well as
-Slurm state and log directories.
+**Slurm Docker Cluster** is a multi-container Slurm cluster designed for rapid
+deployment using Docker Compose. This repository simplifies the process of
+setting up a robust Slurm environment for development, testing, or lightweight
+usage.
 
-## Containers and Volumes
+## 🏁 Getting Started
 
-The compose file will run the following containers:
+To get up and running with Slurm in Docker, make sure you have the following tools installed:
 
-* mysql
-* slurmdbd
-* slurmctld
-* c1 (slurmd)
-* c2 (slurmd)
+- **[Docker](https://docs.docker.com/get-docker/)**
+- **[Docker Compose](https://docs.docker.com/compose/install/)**
 
-The compose file will create the following named volumes:
+Clone the repository:
 
-* etc_munge         ( -> /etc/munge     )
-* etc_slurm         ( -> /etc/slurm     )
-* slurm_jobdir      ( -> /data          )
-* var_lib_mysql     ( -> /var/lib/mysql )
-* var_log_slurm     ( -> /var/log/slurm )
+```bash
+git clone https://github.com/giovtorres/slurm-docker-cluster.git
+cd slurm-docker-cluster
+```
 
-## Building the Docker Image
+## 📦 Containers and Volumes
 
-Build the image locally:
+This setup consists of the following containers:
 
-```console
+- **mysql**: Stores job and cluster data.
+- **slurmdbd**: Manages the Slurm database.
+- **slurmctld**: The Slurm controller responsible for job and resource management.
+- **c1, c2**: Compute nodes (running `slurmd`).
+
+### Persistent Volumes:
+
+- `etc_munge`: Mounted to `/etc/munge`
+- `etc_slurm`: Mounted to `/etc/slurm`
+- `slurm_jobdir`: Mounted to `/data`
+- `var_lib_mysql`: Mounted to `/var/lib/mysql`
+- `var_log_slurm`: Mounted to `/var/log/slurm`
+
+## 🛠️  Building the Docker Image
+
+You can build the Slurm Docker image locally with:
+
+```bash
 docker build -t slurm-docker-cluster:21.08.6 .
 ```
 
-Build a different version of Slurm using Docker build args and the Slurm Git
-tag:
+Or, to build a different version of Slurm, specify the [Slurm Git tag](https://github.com/SchedMD/slurm/tags):
 
-```console
-docker build --build-arg SLURM_TAG="slurm-19-05-2-1" -t slurm-docker-cluster:19.05.2 .
+```bash
+docker build --build-arg SLURM_TAG="slurm-22-05-1-1" -t slurm-docker-cluster:22.05.1 .
 ```
 
-Or equivalently using `docker-compose`:
+Alternatively, use `docker-compose` to build the image:
 
-```console
-SLURM_TAG=slurm-19-05-2-1 IMAGE_TAG=19.05.2 docker-compose build
+```bash
+SLURM_TAG=slurm-22-05-1-1 IMAGE_TAG=22.05.1 docker-compose build
 ```
 
+## 🚀 Starting the Cluster
 
-## Starting the Cluster
+Once the image is built, deploy the cluster with the default version of slurm
+using Docker Compose:
 
-Run `docker-compose` to instantiate the cluster:
-
-```console
-IMAGE_TAG=19.05.2 docker-compose up -d
+```bash
+docker-compose up -d
 ```
 
-## Register the Cluster with SlurmDBD
+To specify a specific version, specify the `IMAGE_TAG`:
 
-To register the cluster to the slurmdbd daemon, run the `register_cluster.sh`
-script:
+```bash
+IMAGE_TAG=22.05.1 docker-compose up -d
+```
 
-```console
+This will start up all containers in detached mode. You can monitor their status using:
+
+```bash
+docker-compose ps
+```
+
+## 📝 Register the Cluster
+
+After the containers are up and running, register the cluster with **SlurmDBD**:
+
+```bash
 ./register_cluster.sh
 ```
 
-> Note: You may have to wait a few seconds for the cluster daemons to become
-> ready before registering the cluster.  Otherwise, you may get an error such
-> as **sacctmgr: error: Problem talking to the database: Connection refused**.
->
-> You can check the status of the cluster by viewing the logs: `docker-compose
-> logs -f`
+> **Tip**: Wait a few seconds for the daemons to initialize before running the registration script to avoid connection errors like:
+> `sacctmgr: error: Problem talking to the database: Connection refused`.
 
-## Accessing the Cluster
+For real-time cluster logs, use:
 
-Use `docker exec` to run a bash shell on the controller container:
+```bash
+docker-compose logs -f
+```
 
-```console
+## 🖥️  Accessing the Cluster
+
+To interact with the Slurm controller, open a shell inside the `slurmctld` container:
+
+```bash
 docker exec -it slurmctld bash
 ```
 
-From the shell, execute slurm commands, for example:
+Now you can run any Slurm command from inside the container:
 
-```console
+```bash
 [root@slurmctld /]# sinfo
 PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
 normal*      up 5-00:00:00      2   idle c[1-2]
 ```
 
-## Submitting Jobs
+## 🧑‍💻 Submitting Jobs
 
-The `slurm_jobdir` named volume is mounted on each Slurm container as `/data`.
-Therefore, in order to see job output files while on the controller, change to
-the `/data` directory when on the **slurmctld** container and then submit a job:
+The cluster mounts the `slurm_jobdir` volume across all nodes, making job files accessible from the `/data` directory. To submit a job:
 
-```console
+```bash
 [root@slurmctld /]# cd /data/
 [root@slurmctld data]# sbatch --wrap="hostname"
 Submitted batch job 2
-[root@slurmctld data]# ls
-slurm-2.out
+```
+
+Check the output of the job:
+
+```bash
 [root@slurmctld data]# cat slurm-2.out
 c1
 ```
 
-## Stopping and Restarting the Cluster
+## 🔄 Cluster Management
 
-```console
+### Stopping and Restarting:
+
+Stop the cluster without removing the containers:
+
+```bash
 docker-compose stop
+```
+
+Restart it later:
+
+```bash
 docker-compose start
 ```
 
-## Deleting the Cluster
+### Deleting the Cluster:
 
-To remove all containers and volumes, run:
+To completely remove the containers and associated volumes:
 
-```console
-docker-compose stop
-docker-compose rm -f
-docker volume rm slurm-docker-cluster_etc_munge slurm-docker-cluster_etc_slurm slurm-docker-cluster_slurm_jobdir slurm-docker-cluster_var_lib_mysql slurm-docker-cluster_var_log_slurm
+```bash
+docker-compose down -v
 ```
-## Updating the Cluster
 
-If you want to change the `slurm.conf` or `slurmdbd.conf` file without a rebuilding you can do so by calling
-```console
+## ⚙️ Advanced Configuration
+
+You can modify Slurm configurations (`slurm.conf`, `slurmdbd.conf`) on the fly without rebuilding the containers. Just run:
+
+```bash
 ./update_slurmfiles.sh slurm.conf slurmdbd.conf
-```
-(or just one of the files).
-The Cluster will automatically be restarted afterwards with
-```console
 docker-compose restart
 ```
-This might come in handy if you add or remove a node to your cluster or want to test a new setting.
+
+This makes it easy to add/remove nodes or test new configuration settings dynamically.
+
+## 🤝 Contributing
+
+Contributions are welcomed from the community! If you want to add features, fix bugs, or improve documentation:
+
+1. Fork this repo.
+2. Create a new branch: `git checkout -b feature/your-feature`.
+3. Submit a pull request.
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
