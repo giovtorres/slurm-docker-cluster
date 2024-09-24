@@ -50,10 +50,10 @@ Or, to build a different version of Slurm, specify the [Slurm Git tag](https://g
 docker build --build-arg SLURM_TAG="slurm-22-05-1-1" -t slurm-docker-cluster:22.05.1 .
 ```
 
-Alternatively, use `docker-compose` to build the image:
+Alternatively, use `docker compose` to build the image:
 
 ```bash
-SLURM_TAG=slurm-22-05-1-1 IMAGE_TAG=22.05.1 docker-compose build
+SLURM_TAG=slurm-22-05-1-1 IMAGE_TAG=22.05.1 docker compose build
 ```
 
 ## 🚀 Starting the Cluster
@@ -62,19 +62,19 @@ Once the image is built, deploy the cluster with the default version of slurm
 using Docker Compose:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 To specify a specific version, specify the `IMAGE_TAG`:
 
 ```bash
-IMAGE_TAG=22.05.1 docker-compose up -d
+IMAGE_TAG=22.05.1 docker compose up -d
 ```
 
 This will start up all containers in detached mode. You can monitor their status using:
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 ## 📝 Register the Cluster
@@ -91,7 +91,7 @@ After the containers are up and running, register the cluster with **SlurmDBD**:
 For real-time cluster logs, use:
 
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ## 🖥️  Accessing the Cluster
@@ -134,13 +134,13 @@ c1
 Stop the cluster without removing the containers:
 
 ```bash
-docker-compose stop
+docker compose stop
 ```
 
 Restart it later:
 
 ```bash
-docker-compose start
+docker compose start
 ```
 
 ### Deleting the Cluster:
@@ -148,7 +148,7 @@ docker-compose start
 To completely remove the containers and associated volumes:
 
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ## ⚙️ Advanced Configuration
@@ -157,7 +157,7 @@ You can modify Slurm configurations (`slurm.conf`, `slurmdbd.conf`) on the fly w
 
 ```bash
 ./update_slurmfiles.sh slurm.conf slurmdbd.conf
-docker-compose restart
+docker compose restart
 ```
 
 This makes it easy to add/remove nodes or test new configuration settings dynamically.
