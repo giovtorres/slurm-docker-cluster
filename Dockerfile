@@ -51,7 +51,7 @@ RUN set -ex \
     && chmod +x /usr/local/bin/gosu \
     && gosu nobody true
 
-ARG SLURM_TAG=slurm-21-08-6-1
+ARG SLURM_TAG
 
 RUN set -x \
     && git clone -b ${SLURM_TAG} --single-branch --depth=1 https://github.com/SchedMD/slurm.git \
