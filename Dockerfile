@@ -37,7 +37,7 @@ RUN set -ex \
 
 RUN alternatives --set python /usr/bin/python3
 
-RUN pip3 install Cython nose
+RUN pip3 install Cython pytest
 
 ARG GOSU_VERSION=1.11
 
