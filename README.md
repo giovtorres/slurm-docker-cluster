@@ -38,22 +38,22 @@ This setup consists of the following containers:
 
 ## 🛠️  Building the Docker Image
 
-You can build the Slurm Docker image locally with:
+The version of the Slurm project and the Docker build process can be simplified
+by using a `.env` file, which will be automatically picked up by Docker Compose.
+
+Update the `SLURM_TAG` and `IMAGE_TAG` found in the `.env` file and build
+the image:
 
 ```bash
-docker build -t slurm-docker-cluster:21.08.6 .
+docker compose build
 ```
 
-Or, to build a different version of Slurm, specify the [Slurm Git tag](https://github.com/SchedMD/slurm/tags):
+Alternatively, you can build the Slurm Docker image locally by specifying the
+[SLURM_TAG](https://github.com/SchedMD/slurm/tags) as a build argument and
+tagging the container with a version ***(IMAGE_TAG)***:
 
 ```bash
-docker build --build-arg SLURM_TAG="slurm-22-05-1-1" -t slurm-docker-cluster:22.05.1 .
-```
-
-Alternatively, use `docker compose` to build the image:
-
-```bash
-SLURM_TAG=slurm-22-05-1-1 IMAGE_TAG=22.05.1 docker compose build
+docker build --build-arg SLURM_TAG="slurm-21-08-6-1" -t slurm-docker-cluster:21.08.6 .
 ```
 
 ## 🚀 Starting the Cluster
@@ -65,10 +65,11 @@ using Docker Compose:
 docker compose up -d
 ```
 
-To specify a specific version, specify the `IMAGE_TAG`:
+To specify a specific version and override what is configured in `.env`, specify
+the `IMAGE_TAG`:
 
 ```bash
-IMAGE_TAG=22.05.1 docker compose up -d
+IMAGE_TAG=21.08.6 docker compose up -d
 ```
 
 This will start up all containers in detached mode. You can monitor their status using:
