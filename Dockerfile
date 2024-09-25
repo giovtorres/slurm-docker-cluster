@@ -39,7 +39,7 @@ RUN alternatives --set python /usr/bin/python3
 
 RUN pip3 install Cython pytest
 
-ARG GOSU_VERSION=1.11
+ARG GOSU_VERSION=1.17
 
 RUN set -ex \
     && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64" \
