@@ -10,6 +10,8 @@ services:
       MYSQL_PASSWORD: password
     volumes:
       - var_lib_mysql:/var/lib/mysql
+    networks:
+      - slurm-network
 
   slurmdbd:
     image: slurm-docker-cluster:${IMAGE_TAG}
@@ -28,6 +30,8 @@ services:
       - "6819"
     depends_on:
       - mysql
+    networks:
+      - slurm-network
 
   slurmctld:
     image: slurm-docker-cluster:${IMAGE_TAG}
@@ -43,6 +47,8 @@ services:
       - "6817"
     depends_on:
       - "slurmdbd"
+    networks:
+      - slurm-network
 
   c1:
     image: slurm-docker-cluster:${IMAGE_TAG}
@@ -58,6 +64,8 @@ services:
       - "6818"
     depends_on:
       - "slurmctld"
+    networks:
+      - slurm-network
 
   c2:
     image: slurm-docker-cluster:${IMAGE_TAG}
@@ -73,6 +81,8 @@ services:
       - "6818"
     depends_on:
       - "slurmctld"
+    networks:
+      - slurm-network
 
 volumes:
   etc_munge:
@@ -80,3 +90,7 @@ volumes:
   slurm_jobdir:
   var_lib_mysql:
   var_log_slurm:
+
+networks:
+  slurm-network:
+    driver: bridge
