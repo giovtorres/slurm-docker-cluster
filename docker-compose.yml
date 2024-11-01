@@ -34,8 +34,7 @@ services:
       - slurm-network
 
   slurmctld:
-    image: slurm-docker-cluster:${IMAGE_TAG}
-    command: ["slurmctld"]
+    image: test-slurm-agent
     container_name: slurmctld
     hostname: slurmctld
     volumes:
@@ -49,6 +48,8 @@ services:
       - "slurmdbd"
     networks:
       - slurm-network
+    environment:
+      - REQUESTS_VERIFY_SSL=false
 
   c1:
     image: slurm-docker-cluster:${IMAGE_TAG}

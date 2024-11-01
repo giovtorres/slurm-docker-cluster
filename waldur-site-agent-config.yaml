@@ -1,0 +1,37 @@
+sentry_dsn: "" # Data Source Name for Sentry (more info https://docs.sentry.io/product/sentry-basics/dsn-explainer/).
+offerings: # Settings for offerings
+  - name: "Westlake Supercomputing VM Offering" # offering name
+    waldur_api_url: "https://localhost/api" # URL of Waldur API (e.g. http://localhost:8081/api/).
+    waldur_api_token: "api_token" # Token to access the Waldur API.
+    waldur_offering_uuid: "offering_uuid" # UUID of the offering in Waldur.
+    backend_type: "slurm" # type of backend, for now only `slurm` is supported
+    backend_settings: # backend-specific settings
+      default_account: "root" # Default parent account name in SLURM cluster
+        # for new ones
+      customer_prefix: "hpc_" # Prefix for customer's accounts.
+      project_prefix: "hpc_" # Prefix for project's accounts.
+      allocation_prefix: "hpc_" # Prefix used for allocation's accounts.
+        # created by the agent.
+      qos_downscaled: "limited" # The qos set to an account after downscaling
+      qos_paused: "paused" # The qos set to an account after pausing
+      enable_user_homedir_account_creation: true # Whether to create home directories
+        # for users associated to accounts.
+      homedir_umask: "0700" # A umask for created homedirs
+    backend_components: # Computing components on backend with accounting data
+      cpu: # Type of the component, for example `cpu`
+        limit: 10 # Amount of measured units for Waldur (SLURM measured unit is CPU-minutes)
+        measured_unit: "k-Hours" # Waldur measured unit for accounting.
+          # For example `k-Hours` for CPU
+        unit_factor: 60000 # Factor for conversion from measured unit
+          # to backend ones.
+          # For example 60000 (60 * 1000) for CPU in SLURM,
+          # which uses cpu-minutes for accounting
+        accounting_type: "usage" # Can be either `usage` or `limit`
+        label: "CPU" # A label for the component in Waldur
+      mem:
+        limit: 10 # Amount of measured units for Waldur (SLURM measured unit is MB-minutes)
+        measured_unit: 'gb-Hours' # Waldur measured unit for accounting
+        unit_factor: 61440 # Unit factor for conversion from measured unit
+          # to SLURM units (60 * 1024)
+        accounting_type: "usage" # Can be usage or limit
+        label: RAM # A label for a component in Waldur
