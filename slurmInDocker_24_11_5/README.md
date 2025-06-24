@@ -193,7 +193,7 @@ make
 UID  990  slurm            GID  990  slurm         
 UID  995  slurmrestd   GID  995  restd
 
-slurmrestd should not be run as SlurmUser or with SlurmUser’s group. see chown and chmod in Dockfile
+slurmrestd should not be run as SlurmUser or with SlurmUser’s group. see chown and chmod in Dockerfile
 
 !!! Be sure to find the correct version of dataparser, this is not mentioned in the official manual, but if the version is wrong you will not be able to submit the rest request correctly, Default: Latest data_parser plugin version with no flags in **slurm.conf** selected:
 
