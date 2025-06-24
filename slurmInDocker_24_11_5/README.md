@@ -32,7 +32,7 @@ Maria DB :
 
 RockyLinux : `9`
 
-Slurm default version : `24.05.1`
+Slurm default version : `24.11.5`
 
 UID : `990`
 GID : `990`
