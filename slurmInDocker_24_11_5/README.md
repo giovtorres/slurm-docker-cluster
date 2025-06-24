@@ -42,21 +42,14 @@ GID : `990`
 
 Build the image locally:
 
-```console
-docker build -t slurm-docker-cluster:24.05.1 .
-```
-
-Build a different version of Slurm using Docker build args and the Slurm Git
-tag:
-
-```console
-docker build --build-arg SLURM_TAG="slurm-23-11-8-1" -t slurm-docker-cluster:23.11.8 .
+```bash
+docker build -t slurm-docker-cluster:24-11-5 .
 ```
 
 Or equivalently using `docker compose`:
 
-```console
-SLURM_TAG=slurm-23-11-8-1 IMAGE_TAG=23.11.8 docker compose build
+```bash
+docker compose up -d
 ```
 
 Slurm Tags : https://github.com/SchedMD/slurm/tags
@@ -66,7 +59,7 @@ Slurm Tags : https://github.com/SchedMD/slurm/tags
 Run `docker compose` to instantiate the cluster:
 
 ```console
-IMAGE_TAG=24.05.1 docker compose up -d
+docker compose up -d
 ```
 
 ## 5. Register the Cluster with SlurmDBD
@@ -197,7 +190,7 @@ cd src/plugins/auth/jwt
 make
 ```
 
-UID  990  slurm        GID  990  slurm         
+UID  990  slurm            GID  990  slurm         
 UID  995  slurmrestd   GID  995  restd
 
 slurmrestd should not be run as SlurmUser or with SlurmUser’s group. see chown and chmod in Dockfile

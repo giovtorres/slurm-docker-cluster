@@ -15,6 +15,18 @@ volumes:
     
 ## SERVICES
 services:
+  slurm-base:
+    image: slurm-docker-cluster:24-11-5
+    build:
+      context: .
+      dockerfile: Dockerfile 
+      args:
+        SLURM_TAG: slurm-24-11-5   
+    volumes:
+      - var_lib_mysql:/var/lib/mysql
+    networks:
+      - slurm_net      
+
   # MariaDB
   mysql:
     image: mariadb:11
@@ -33,11 +45,7 @@ services:
 
   # SlurmDBd
   slurmdbd:
-    image: slurm-docker-cluster:${IMAGE_TAG:-24.05.1}
-    build:
-      context: .
-      args:
-        SLURM_TAG: ${SLURM_TAG:-slurm-24-05-1-1}
+    image: slurm-docker-cluster:24-11-5
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
@@ -59,8 +67,7 @@ services:
 
   # Slurmctld
   slurmctld:
-    image: slurm-docker-cluster:${IMAGE_TAG:-24.05.1}
-    privileged: true
+    image: slurm-docker-cluster:24-11-5
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
@@ -84,7 +91,7 @@ services:
 
   # Compute node 1
   compute1:
-    image: slurm-docker-cluster:${IMAGE_TAG:-24.05.1}
+    image: slurm-docker-cluster:24-11-5
     privileged: true
     command: ["slurmd"]
     hostname: compute1
@@ -107,7 +114,7 @@ services:
 
   # # Compute node 2
   # compute2:
-  #   image: slurm-docker-cluster:${IMAGE_TAG:-24.05.1}
+  #   image: slurm-docker-cluster:slurm-docker-cluster:24-11-5
   #   privileged: true
   #   command: ["slurmd"]
   #   hostname: compute2
@@ -126,7 +133,7 @@ services:
   #     - "slurmctld"
 
   slurmrestd:
-    image: slurm-docker-cluster:${IMAGE_TAG:-24.05.1}
+    image: slurm-docker-cluster:24-11-5
     container_name: slurmrestd
     privileged: true
     command: ["slurmrestd"]

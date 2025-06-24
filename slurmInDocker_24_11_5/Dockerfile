@@ -1,17 +1,18 @@
 FROM rockylinux:9
 
 LABEL org.opencontainers.image.source="https://github.com/sckyzo/slurm-docker-cluster" \
-      org.opencontainers.image.title="slurm-docker-cluster" \
-      org.opencontainers.image.description="Slurm Docker cluster on Rocky Linux 9" \
-      org.label-schema.docker.cmd="docker-compose up -d" \
-      maintainer="Thomas Bourcey"
+      org.opencontainers.image.title="Custom Slurm Docker Cluster" \
+      org.opencontainers.image.description="Customized Slurm cluster image with RESTAPI, Elasticsearch, Grafana , based on Rocky Linux 9" \
+      org.opencontainers.image.authors="Thomas Bourcey, modified by Jiadong Zhou" \
+      org.opencontainers.image.maintainer="Jiadong Zhou" \
+      org.opencontainers.image.licenses="MIT"
 
 # Define build arguments
 ARG USER=slurm
 ARG PUID=990
 ARG PGID=990 
 ARG GOSU_VERSION=1.17
-ARG SLURM_TAG=slurm-24-05-1-1
+ARG SLURM_TAG=slurm-24-1-5
 ARG RESTUID=995
 ARG RESTGID=995 
 
