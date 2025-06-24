@@ -1,0 +1,161 @@
+#!/usr/bin/env expect
+############################################################################
+# Purpose: Test of Slurm functionality
+#          Test of advanced reservation "replace" option.
+############################################################################
+# Copyright (C) SchedMD LLC.
+#
+# This file is part of Slurm, a resource management program.
+# For details, see <https://slurm.schedmd.com/>.
+# Please also read the included file: DISCLAIMER.
+#
+# Slurm is free software; you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# Slurm is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along
+# with Slurm; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA.
+############################################################################
+source ./globals
+
+set node_list_new       ""
+set node_list_orig      ""
+set resv_name           "resv$test_id"
+set user_name		""
+
+if {![is_super_user]} {
+	skip "This test can't be run except as SlurmUser"
+}
+
+set def_part_name [default_partition]
+set nb_nodes [get_partition_param $def_part_name "TotalNodes"]
+if {$nb_nodes < 3} {
+	skip "This test requires at least 3 nodes in the cluster"
+}
+
+set user_name [get_my_user_name]
+
+#
+# Create the advanced reservation
+#
+if { [create_res $resv_name "starttime=now duration=2 nodecnt=2 flags=replace partition=$def_part_name users=$user_name"] } {
+	fail "Error creating reservation"
+}
+
+#
+# Check the advanced reservation's allocated nodes and "REPLACE" flag
+#
+set match 0
+spawn $scontrol show ReservationName=$resv_name
+expect {
+	-re "Nodes=($re_word_str)" {
+		set node_list_orig $expect_out(1,string)
+		exp_continue
+	}
+	-re "Flags=REPLACE" {
+		set match 1
+		exp_continue
+	}
+	timeout {
+		fail "scontrol not responding"
+	}
+	eof {
+		wait
+	}
+}
+subtest {$match == 1} "Verify Reservation REPLACE flag found"
+
+#
+# Use a node from the reservation, so it gets replaced
+#
+spawn $srun -t1 -n1 --reservation=$resv_name $bin_hostname
+expect {
+	timeout {
+		fail "scontrol not responding"
+	}
+	eof {
+		wait
+	}
+}
+
+#
+# Check that advanced reservation's allocated nodes has been updated
+#
+spawn $scontrol show ReservationName=$resv_name
+expect {
+	-re "Nodes=($re_word_str)" {
+		set node_list_new $expect_out(1,string)
+		exp_continue
+	}
+	timeout {
+		fail "scontrol not responding"
+	}
+	eof {
+		wait
+	}
+}
+subtest {$node_list_orig ne $node_list_new} "Verify reservation replaces allocated node"
+
+#
+# Drain a node from the reservation, so it gets replaced
+#
+spawn $scontrol update NodeName=$node_list_new State=DRAIN Reason=TESTING
+expect {
+	-re "Error|error" {
+		fail "Error updating node"
+	}
+	timeout {
+		fail "scontrol not responding"
+	}
+	eof {
+		wait
+	}
+}
+#
+#Wait PERIODIC_TIMEOUT
+#
+sleep 32
+#
+# Check that advanced reservation's allocated nodes has been updated
+#
+spawn $scontrol show ReservationName=$resv_name
+expect {
+	-re "Nodes=($re_word_str)" {
+		set node_list_orig $expect_out(1,string)
+		exp_continue
+	}
+	timeout {
+		fail "scontrol not responding"
+	}
+	eof {
+		wait
+	}
+}
+subtest {$node_list_orig ne $node_list_new} "Verify reservation replaces drain node"
+
+#
+# Delete the advanced reservation
+#
+if [delete_res $resv_name] {
+	fail "Unable to delete reservation ($resv_name)"
+}
+
+spawn $scontrol update NodeName=$node_list_new State=RESUME
+expect {
+	-re "Error|error" {
+		fail "Error updating node"
+	}
+	timeout {
+		fail "scontrol not responding"
+	}
+	eof {
+		wait
+	}
+}

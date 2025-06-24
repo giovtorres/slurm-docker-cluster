@@ -1,0 +1,184 @@
+<!--#include virtual="header.txt"-->
+
+<h1>Trackable RESources (TRES)</h1>
+
+<p>A TRES is a resource that can be tracked for usage or used to enforce
+  limits against.  A TRES is a combination of a Type and a Name.
+  Types are predefined.
+
+Current TRES Types are:
+</p>
+<ul>
+<li>BB (burst buffers)</li>
+<li>Billing</li>
+<li>CPU</li>
+<li>Energy</li>
+<li>FS (filesystem)</li>
+<li>GRES</li>
+<li>IC (interconnect)</li>
+<li>License</li>
+<li>Mem (Memory)</li>
+<li>Node</li>
+<li>Pages</li>
+<li>VMem (Virtual Memory/Size)</li>
+</ul>
+
+<p>
+  The Billing TRES is calculated from a partition's TRESBillingWeights. Though
+  TRES weights on a partition may be defined as doubles, the Billing TRES values
+  for a job are stored as integers. This is not the case when calculating a
+  job's fairshare where the value is treated as a double.
+</p>
+
+<p>
+  Valid 'FS' TRES are 'disk' (local disk) and 'lustre'.  These are primarily
+  there for reporting usage, not limiting access.
+</p>
+
+<p>
+  Valid 'IC' TRES is 'ofed'.  These are primarily there for reporting usage, not
+  limiting access.
+</p>
+
+<h2 id="conf">slurm.conf settings<a class="slurm_link" href="#conf"></a></h2>
+<ul>
+<li><b>AccountingStorageTRES</b>
+<p>Used to define which TRES are
+  to be tracked on the system. By default Billing, CPU, Energy, Memory, Node,
+  FS/Disk, Pages and VMem are tracked. These default TRES cannot be disabled,
+  but only appended to. The following example:
+</p>
+  <pre>AccountingStorageTRES=gres/gpu,license/iop1</pre>
+<p>
+  will track billing, cpu, energy, memory, nodes, fs/disk, pages and vmem along
+  with a GRES called gpu, as well as a license called iop1. Whenever these
+  resources are used on the cluster they are recorded. TRES are automatically
+  set up in the database on the start of the slurmctld.
+</p>
+
+<p> The TRES that require associated names are BB, GRES, and
+  License.  As seen in the above example, GRES and License are typically
+  different on each system.  The BB TRES is named the same as
+  the burst buffer plugin being used. In the above example we are using the
+  <i>Cray</i> burst buffer plugin.
+</p>
+
+<p> When including a specific GRES with a subtype, it is also recommended to
+include its generic type, otherwise a request with only the generic one won't
+be accounted for. For example, if we want to account for gres/gpu:tesla,
+we would also include gres/gpu for accounting gpus in requests like
+<i>srun --gres=gpu:1</i>.
+</p>
+<pre>AccountingStorageTRES=gres/gpu,gres/gpu:tesla</pre>
+</li>
+
+<p><b>NOTE</b>: Setting gres/gpu will also set gres/gpumem and gres/gpuutil.
+gres/gpumem and gres/gpuutil can be set individually when gres/gpu is not set.
+</p>
+
+<li><b>PriorityWeightTRES</b>
+<p>A comma separated list of TRES Types and weights that sets the
+  degree that each TRES Type contributes to the job's priority.</p>
+<pre>PriorityWeightTRES=CPU=1000,Mem=2000,GRES/gpu=3000</pre>
+
+<p>Applicable only if PriorityType=priority/multifactor and if
+AccountingStorageTRES is configured with each TRES Type.
+The default values are 0.</p>
+
+<p>The Billing TRES is not available for priority calculations because the
+number isn't generated until after the job has been allocated resources &mdash;
+since the number can change for different partitions.<p>
+</li>
+
+<li><b>TRESBillingWeights</b>
+<p>For each partition this option is used to define the billing
+  weights of each TRES type that will be used in calculating the usage
+  of a job.
+</p>
+
+<p>Billing weights are specified as a comma-separated list of
+<i>TRES=Weight</i> pairs.
+</p>
+
+<p>Any TRES Type is available for billing. Note that the base unit for memory
+and burst buffers is megabytes.
+</p>
+
+<p>By default the billing of TRES is calculated as the sum of all TRES types
+multiplied by their corresponding billing weight.
+</p>
+
+<p>The weighted amount of a resource can be adjusted by adding a suffix of
+K,M,G,T or P after the billing weight. For example, a memory weight of "mem=.25"
+on a job allocated 8GB will be billed 2048 (8192MB *.25) units. A memory weight
+of "mem=.25G" on the same job will be billed 2 (8192MB * (.25/1024)) units.
+</p>
+
+<p>When a job is allocated 1 CPU and 8 GB of memory on a partition configured
+with:
+</p>
+
+<pre>TRESBillingWeights="CPU=1.0,Mem=0.25G,GRES/gpu=2.0,license/licA=1.5"</pre>
+
+<p>the billable TRES will be:
+</p>
+<pre>(1*1.0) + (8*0.25) + (0*2.0) + (0*1.5) = 3.0</pre>
+
+<p>If <i>PriorityFlags=MAX_TRES</i> is configured, the billable TRES is
+  calculated as the MAX of individual TRESs on a node (e.g. cpus, mem,
+  gres) plus the sum of all global TRESs (e.g. licenses). Using the
+  same example above, the billable TRES will be:
+</p>
+<pre>MAX(1*1.0, 8*0.25, 0*2.0) + (0*1.5) = 2.0</pre>
+
+<p>If TRESBillingWeights is not defined then the job is billed against the total
+number of allocated CPUs.
+</p>
+
+<p><b>NOTE</b>: TRESBillingWeights is only used when calculating fairshare and
+doesn't affect job priority directly as it is currently not used for the size of
+the job. If you want TRESs to play a role in the job's priority then refer to
+the PriorityWeightTRES option.
+</p>
+
+<p><b>NOTE</b>: As with PriorityWeightTRES only TRES defined in
+  AccountingStorageTRES are available for TRESBillingWeights.
+</p>
+
+<p><b>NOTE</b>: Jobs can be limited based off of the calculated TRES billing
+value. See <a href="resource_limits.html">Resource Limits</a> documentation for
+more information.
+</p>
+
+<p><b>NOTE</b>: If a Billing TRES is defined as a weight, it is ignored.</p>
+</li>
+
+</ul>
+
+<h2 id="sacct">sacct<a class="slurm_link" href="#sacct"></a></h2>
+<p>sacct can be used to view the TRES of each job by adding "tres" to the
+  --format option.
+</p>
+
+<h2 id="sacctmgr">sacctmgr<a class="slurm_link" href="#sacctmgr"></a></h2>
+<p>sacctmgr is used to view the various TRES available globally in the
+  system. <i>sacctmgr show tres</i> will do this.
+</p>
+
+<h2 id="sreport">sreport<a class="slurm_link" href="#sreport"></a></h2>
+<p>sreport reports on different TRES. Simply using the comma separated input
+  option <i>--tres=</i> will have sreport generate reports available
+  for the requested TRES types.  More information about these reports
+  can be found on the <a href="sreport.html">sreport manpage</a>.
+</p>
+<p>
+  In <i>sreport</i>, the "Reported" Billing TRES is calculated from the largest
+  Billing TRES of each node multiplied by the time frame. For example, if a node
+  is part of multiple partitions and each has a different TRESBillingWeights
+  defined the Billing TRES for the node will be the highest of the partitions.
+  If TRESBillingWeights is not defined on any partition for a node then the
+  Billing TRES will be equal to the number of CPUs on the node.
+</p>
+<p style="text-align:center;">Last modified 16 August 2024</p>
+
+<!--#include virtual="footer.txt"-->
