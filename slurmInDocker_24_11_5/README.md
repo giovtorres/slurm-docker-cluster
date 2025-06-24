@@ -15,6 +15,9 @@ The compose file will run the following containers:
 * slurmctld
 * compute1 (slurmd)
 * compute2 (slurmd)
+* grafana
+* elasticsearch
+* base(for test)
 
 The compose file will create the following named volumes:
 
