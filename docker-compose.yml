@@ -1,4 +1,12 @@
 services:
+  base:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SLURM_TAG: slurm-24-1-5
+      image: slurm-docker-cluster:custom
+
   mysql:
     image: mariadb:10.11
     hostname: mysql
