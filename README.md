@@ -1,5 +1,9 @@
 # Slurm Docker Cluster
 
+<p align="center">
+    <b> English | <a href="./readme/README_CN.md">简体中文</a> </b>
+</p>
+
 **Slurm Docker Cluster** is a multi-container Slurm cluster designed for rapid
 deployment using Docker Compose. This repository simplifies the process of
 setting up a robust Slurm environment for development, testing, or lightweight
