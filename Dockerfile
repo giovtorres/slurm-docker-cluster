@@ -51,7 +51,15 @@ RUN set -ex \
     && chmod +x /usr/local/bin/gosu \
     && gosu nobody true
 
+# Install gomplate for template processing
+ARG GOMPLATE_VERSION=v3.11.5
+RUN set -ex \
+    && wget -O /usr/local/bin/gomplate "https://github.com/hairyhenderson/gomplate/releases/download/${GOMPLATE_VERSION}/gomplate_linux-amd64" \
+    && chmod +x /usr/local/bin/gomplate
+
 ARG SLURM_TAG
+ARG SLURM_VERSION
+ARG IMAGE_TAG
 
 RUN set -x \
     && git clone -b ${SLURM_TAG} --single-branch --depth=1 https://github.com/SchedMD/slurm.git \
@@ -86,10 +94,18 @@ RUN set -x \
     && chown -R slurm:slurm /var/*/slurm* \
     && /sbin/create-munge-key
 
-COPY slurm.conf /etc/slurm/slurm.conf
-COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
-RUN set -x \
-    && chown slurm:slurm /etc/slurm/slurmdbd.conf \
+# Copy template files directly to final destination and generation script
+COPY configs/ /usr/local/share/slurm/templates/
+COPY generate_configs.sh /tmp/generate_configs.sh
+
+# Generate configuration files from templates
+RUN chmod +x /tmp/generate_configs.sh \
+    && SLURM_TAG=${SLURM_TAG} IMAGE_TAG=${IMAGE_TAG} \
+       /tmp/generate_configs.sh /usr/local/share/slurm/templates /etc/slurm \
+    && rm /tmp/generate_configs.sh
+
+# Fix ownership and permissions after config generation
+RUN chown -R slurm:slurm /etc/slurm \
     && chmod 600 /etc/slurm/slurmdbd.conf
 
 

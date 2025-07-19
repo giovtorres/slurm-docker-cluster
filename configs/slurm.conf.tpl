@@ -1,3 +1,4 @@
+{{- $slurmVersion := getenv "SLURM_VERSION" }}
 # slurm.conf
 #
 # See the slurm.conf man page for more information.
@@ -56,9 +57,15 @@ SchedulerType=sched/backfill
 #SchedulerAuth=
 #SchedulerPort=
 #SchedulerRootFilter=
+{{- if lt $slurmVersion "23.02" }}
 SelectType=select/cons_res
+{{- else }}
+SelectType=select/cons_tres
+{{- end }}
 SelectTypeParameters=CR_CPU_Memory
+{{- if lt $slurmVersion "23.11" }}
 FastSchedule=1
+{{- end }}
 #PriorityType=priority/multifactor
 #PriorityDecayHalfLife=14-0
 #PriorityUsageResetPeriod=14-0
@@ -88,7 +95,7 @@ AccountingStoragePort=6819
 #AccountingStorageUser=
 #
 # COMPUTE NODES
-NodeName=c[1-2] RealMemory=1000 State=UNKNOWN
+NodeName=c[1-2] CPUs=1 RealMemory=1000 State=UNKNOWN
 #
 # PARTITIONS
 PartitionName=normal Default=yes Nodes=c[1-2] Priority=50 DefMemPerCPU=500 Shared=NO MaxNodes=2 MaxTime=5-00:00:00 DefaultTime=5-00:00:00 State=UP

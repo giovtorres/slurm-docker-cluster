@@ -19,9 +19,12 @@ services:
       context: .
       args:
         SLURM_TAG: ${SLURM_TAG}
+        IMAGE_TAG: ${IMAGE_TAG}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
+    environment:
+      - IMAGE_TAG=${IMAGE_TAG}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -38,6 +41,8 @@ services:
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
+    environment:
+      - IMAGE_TAG=${IMAGE_TAG}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -55,6 +60,8 @@ services:
     command: ["slurmd"]
     hostname: c1
     container_name: c1
+    environment:
+      - IMAGE_TAG=${IMAGE_TAG}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -72,6 +79,8 @@ services:
     command: ["slurmd"]
     hostname: c2
     container_name: c2
+    environment:
+      - IMAGE_TAG=${IMAGE_TAG}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm

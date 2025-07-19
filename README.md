@@ -158,14 +158,20 @@ docker compose down -v
 
 ## ⚙️ Advanced Configuration
 
-You can modify Slurm configurations (`slurm.conf`, `slurmdbd.conf`) on the fly without rebuilding the containers. Just run:
+You can modify Slurm configuration templates without rebuilding the containers:
 
 ```bash
-./update_slurmfiles.sh slurm.conf slurmdbd.conf
-docker compose restart
+# Edit template files
+vim configs/slurm.conf.tpl
+vim configs/slurmdbd.conf.tpl
+
+# Apply changes
+./update_slurmfiles.sh configs/slurm.conf.tpl configs/slurmdbd.conf.tpl
 ```
 
-This makes it easy to add/remove nodes or test new configuration settings dynamically.
+The script will regenerate the configuration files from templates and restart containers automatically.
+
+**Note**: Templates support both gomplate syntax for version-specific logic and plain static content.
 
 ## 🤝 Contributing
 
