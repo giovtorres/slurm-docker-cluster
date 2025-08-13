@@ -66,6 +66,11 @@ services:
       - "slurmctld"
     networks:
       - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
 
   c2:
     image: slurm-docker-cluster:${IMAGE_TAG}
@@ -83,6 +88,144 @@ services:
       - "slurmctld"
     networks:
       - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
+  c3:
+    image: slurm-docker-cluster:${IMAGE_TAG}
+    command: ["slurmd"]
+    hostname: c3
+    container_name: c3
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
+  c4:
+    image: slurm-docker-cluster:${IMAGE_TAG}
+    command: ["slurmd"]
+    hostname: c4
+    container_name: c4
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
+  c5:
+    image: slurm-docker-cluster:${IMAGE_TAG}
+    command: ["slurmd"]
+    hostname: c5
+    container_name: c5
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
+  c6:
+    image: slurm-docker-cluster:${IMAGE_TAG}
+    command: ["slurmd"]
+    hostname: c6
+    container_name: c6
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
+  c7:
+    image: slurm-docker-cluster:${IMAGE_TAG}
+    command: ["slurmd"]
+    hostname: c7
+    container_name: c7
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
+  c8:
+    image: slurm-docker-cluster:${IMAGE_TAG}
+    command: ["slurmd"]
+    hostname: c8
+    container_name: c8
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm-network
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+
 
 volumes:
   etc_munge:
