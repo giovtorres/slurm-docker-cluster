@@ -10,6 +10,10 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
+# Get current IMAGE_TAG from .env file and calculate SLURM_VERSION
+source .env
+SLURM_VERSION=$(echo "$IMAGE_TAG" | cut -d. -f1,2)
+
 for var in "$@"; do
     if [[ "$var" == *.tpl ]]; then
         # Get base name without .tpl extension
@@ -19,10 +23,6 @@ for var in "$@"; do
         
         # Copy template to container
         docker cp "$var" slurmctld:/usr/local/share/slurm/templates/
-        
-        # Get current IMAGE_TAG from .env file and calculate SLURM_VERSION
-        source .env
-        SLURM_VERSION=$(echo "$IMAGE_TAG" | cut -d. -f1,2)
         
         # Regenerate config from template
         docker exec slurmctld bash -c "

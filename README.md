@@ -165,11 +165,11 @@ You can modify Slurm configuration templates without rebuilding the containers:
 vim configs/slurm.conf.tpl
 vim configs/slurmdbd.conf.tpl
 
-# Apply changes
+# Apply changes (containers will restart automatically)
 ./update_slurmfiles.sh configs/slurm.conf.tpl configs/slurmdbd.conf.tpl
 ```
 
-The script will regenerate the configuration files from templates and restart containers automatically.
+The script will regenerate the configuration files from templates and automatically restart containers with `docker compose restart`.
 
 **Note**: Templates support both gomplate syntax for version-specific logic and plain static content.
 
