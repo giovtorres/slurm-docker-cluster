@@ -20,8 +20,8 @@ for var in "$@"; do
         # Copy template to container
         docker cp "$var" slurmctld:/usr/local/share/slurm/templates/
         
-        # Get current IMAGE_TAG and calculate SLURM_VERSION
-        IMAGE_TAG=$(docker exec slurmctld printenv IMAGE_TAG)
+        # Get current IMAGE_TAG from .env file and calculate SLURM_VERSION
+        source .env
         SLURM_VERSION=$(echo "$IMAGE_TAG" | cut -d. -f1,2)
         
         # Regenerate config from template
