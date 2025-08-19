@@ -19,6 +19,7 @@ services:
       context: .
       args:
         SLURM_TAG: ${SLURM_TAG}
+        IMAGE_TAG: ${IMAGE_TAG}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
