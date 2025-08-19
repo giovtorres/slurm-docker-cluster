@@ -1,0 +1,12 @@
+services:
+  slurmctld:
+    volumes:
+      - ./ray:/data
+
+  c1:
+    volumes:
+      - ./ray:/data
+
+  c2:
+    volumes:
+      - ./ray:/data

@@ -22,9 +22,6 @@ RUN set -ex \
        make \
        munge \
        munge-devel \
-       python3-devel \
-       python3-pip \
-       python3 \
        mariadb-server \
        mariadb-devel \
        psmisc \
@@ -32,12 +29,46 @@ RUN set -ex \
        vim-enhanced \
        http-parser-devel \
        json-c-devel \
+       # Dependencies for pyenv and Python compilation
+       zlib-devel \
+       bzip2-devel \
+       readline-devel \
+       sqlite-devel \
+       openssl-devel \
+       tk-devel \
+       libffi-devel \
+       xz-devel \
+       libuuid-devel \
+       gdbm-devel \
+       libnsl2-devel \
     && yum clean all \
     && rm -rf /var/cache/yum
 
-RUN alternatives --set python /usr/bin/python3
+# Install pyenv
+ENV PYENV_ROOT /opt/pyenv
+ENV PATH $PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH
 
-RUN pip3 install Cython pytest
+RUN set -ex \
+    && git clone https://github.com/pyenv/pyenv.git $PYENV_ROOT \
+    && cd $PYENV_ROOT \
+    && src/configure \
+    && make -C src
+
+# Install Python 3.11 using pyenv and set it as global
+RUN set -ex \
+    && pyenv install 3.11.9 \
+    && pyenv global 3.11.9 \
+    && pyenv rehash
+
+# Create symlinks for compatibility
+RUN ln -sf $PYENV_ROOT/shims/python /usr/bin/python \
+    && ln -sf $PYENV_ROOT/shims/python /usr/bin/python3 \
+    && ln -sf $PYENV_ROOT/shims/pip /usr/bin/pip \
+    && ln -sf $PYENV_ROOT/shims/pip /usr/bin/pip3
+
+# Install Python packages
+RUN pip install --upgrade pip \
+    && pip install Cython pytest
 
 ARG GOSU_VERSION=1.17
 
