@@ -1,0 +1,337 @@
+#!/bin/bash
+set -e
+
+# Detect if running in CI
+CI_MODE=${CI:-false}
+
+# Colors for output (disabled in CI for better log readability)
+if [ "$CI_MODE" = "true" ]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # No Color
+fi
+
+# Test counters
+TESTS_RUN=0
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# Print functions
+print_header() {
+    echo -e "${BLUE}================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}================================${NC}"
+}
+
+print_test() {
+    echo -e "${YELLOW}[TEST]${NC} $1"
+    TESTS_RUN=$((TESTS_RUN + 1))
+}
+
+print_pass() {
+    echo -e "${GREEN}[PASS]${NC} $1"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+}
+
+print_fail() {
+    echo -e "${RED}[FAIL]${NC} $1"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+}
+
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+# Test functions
+test_containers_running() {
+    print_test "Checking if all containers are running..."
+
+    EXPECTED_CONTAINERS=("mysql" "slurmdbd" "slurmctld" "slurmrestd")
+    ALL_RUNNING=true
+
+    for container in "${EXPECTED_CONTAINERS[@]}"; do
+        if docker compose ps "$container" 2>/dev/null | grep -q "Up"; then
+            print_info "  ✓ $container is running"
+        else
+            print_fail "  ✗ $container is not running"
+            ALL_RUNNING=false
+        fi
+    done
+
+    # Check worker nodes dynamically
+    WORKER_COUNT=0
+    for node_service in c1 c2; do
+        if docker compose ps "$node_service" 2>/dev/null | grep -q "Up"; then
+            WORKER_COUNT=$((WORKER_COUNT + 1))
+        fi
+    done
+
+    if [ "$WORKER_COUNT" -gt 0 ]; then
+        print_info "  ✓ $WORKER_COUNT worker node(s) running"
+    else
+        print_fail "  ✗ No worker nodes running"
+        ALL_RUNNING=false
+    fi
+
+    if [ "$ALL_RUNNING" = true ]; then
+        print_pass "All containers are running"
+    else
+        print_fail "Some containers are not running"
+        return 1
+    fi
+}
+
+test_munge_auth() {
+    print_test "Testing MUNGE authentication..."
+
+    if docker exec slurmctld bash -c "munge -n | unmunge" >/dev/null 2>&1; then
+        print_pass "MUNGE authentication is working"
+    else
+        print_fail "MUNGE authentication failed"
+        return 1
+    fi
+}
+
+test_mysql_connection() {
+    print_test "Testing MySQL database connection..."
+
+    if docker exec slurmdbd bash -c "echo 'SELECT 1' | mysql -h mysql -u\${MYSQL_USER} -p\${MYSQL_PASSWORD} 2>/dev/null" >/dev/null; then
+        print_pass "MySQL connection successful"
+    else
+        print_fail "MySQL connection failed"
+        return 1
+    fi
+}
+
+test_slurmdbd_connection() {
+    print_test "Testing slurmdbd daemon..."
+
+    if docker exec slurmctld sacctmgr list cluster -n 2>/dev/null | grep -q "linux"; then
+        print_pass "slurmdbd is responding and cluster is registered"
+    else
+        print_fail "slurmdbd is not responding or cluster not registered"
+        return 1
+    fi
+}
+
+test_slurmctld_status() {
+    print_test "Testing slurmctld daemon..."
+
+    if docker exec slurmctld scontrol ping >/dev/null 2>&1; then
+        print_pass "slurmctld is responding"
+    else
+        print_fail "slurmctld is not responding"
+        return 1
+    fi
+}
+
+test_compute_nodes() {
+    print_test "Testing compute nodes availability..."
+
+    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+
+    # Count running worker nodes
+    EXPECTED_COUNT=0
+    for node_service in c1 c2; do
+        if docker compose ps "$node_service" 2>/dev/null | grep -q "Up"; then
+            EXPECTED_COUNT=$((EXPECTED_COUNT + 1))
+        fi
+    done
+
+    if [ "$NODE_COUNT" -eq "$EXPECTED_COUNT" ]; then
+        print_pass "$NODE_COUNT compute node(s) are available (matches expected $EXPECTED_COUNT)"
+    else
+        print_fail "Expected $EXPECTED_COUNT compute nodes, found $NODE_COUNT"
+        return 1
+    fi
+}
+
+test_nodes_state() {
+    print_test "Testing compute nodes state..."
+
+    IDLE_NODES=$(docker exec slurmctld sinfo -h -o "%T" | grep -c "idle" || echo "0")
+
+    if [ "$IDLE_NODES" -ge 1 ]; then
+        print_pass "Compute nodes are in idle state ($IDLE_NODES nodes)"
+    else
+        print_fail "No compute nodes in idle state"
+        docker exec slurmctld sinfo
+        return 1
+    fi
+}
+
+test_partition() {
+    print_test "Testing partition configuration..."
+
+    if docker exec slurmctld sinfo -h | grep -q "normal"; then
+        print_pass "Default partition 'normal' exists"
+    else
+        print_fail "Default partition 'normal' not found"
+        return 1
+    fi
+}
+
+test_job_submission() {
+    print_test "Testing job submission..."
+
+    # Submit a simple job
+    JOB_ID=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='hostname' 2>&1" | grep -oP 'Submitted batch job \K\d+')
+
+    if [ -n "$JOB_ID" ]; then
+        print_info "  Job ID: $JOB_ID submitted"
+
+        # Wait for job to complete (max 30 seconds)
+        for i in {1..30}; do
+            JOB_STATE=$(docker exec slurmctld squeue -j "$JOB_ID" -h -o "%T" 2>/dev/null || echo "COMPLETED")
+            if [ "$JOB_STATE" = "COMPLETED" ] || [ -z "$JOB_STATE" ]; then
+                break
+            fi
+            sleep 1
+        done
+
+        print_pass "Job submitted successfully (Job ID: $JOB_ID)"
+    else
+        print_fail "Job submission failed"
+        return 1
+    fi
+}
+
+test_job_execution() {
+    print_test "Testing job execution and output..."
+
+    # Submit a job and wait for it
+    OUTPUT=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='echo SUCCESS_TEST_\$SLURM_JOB_ID' --wait 2>&1 && sleep 2 && cat slurm-*.out | grep SUCCESS_TEST" 2>/dev/null || echo "")
+
+    if echo "$OUTPUT" | grep -q "SUCCESS_TEST"; then
+        print_pass "Job executed and produced output"
+    else
+        print_fail "Job execution failed or no output"
+        return 1
+    fi
+}
+
+test_job_accounting() {
+    print_test "Testing job accounting..."
+
+    # Check if sacct can retrieve job history
+    if docker exec slurmctld sacct -n --format=JobID -X 2>/dev/null | grep -q "[0-9]"; then
+        print_pass "Job accounting is working"
+    else
+        print_fail "Job accounting failed - no jobs recorded"
+        return 1
+    fi
+}
+
+test_multi_node_job() {
+    print_test "Testing multi-node job allocation..."
+
+    # Get current node count
+    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+
+    # Only run multi-node test if we have 2+ nodes
+    if [ "$NODE_COUNT" -lt 2 ]; then
+        print_info "  Skipping (only $NODE_COUNT node available)"
+        return 0
+    fi
+
+    # Try to allocate 2 nodes
+    JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 hostname" 2>&1 || echo "FAILED")
+
+    # Count non-empty lines in output (should be 2 hostnames)
+    OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l)
+
+    if [ "$OUTPUT_LINES" -eq 2 ]; then
+        print_pass "Multi-node job executed on 2 nodes"
+    else
+        print_fail "Multi-node job failed"
+        print_info "  Output: $JOB_OUTPUT"
+        return 1
+    fi
+}
+
+test_resource_limits() {
+    print_test "Testing resource limit configuration..."
+
+    # Check if nodes have CPU and memory configured
+    NODE_INFO=$(docker exec slurmctld scontrol show node c1 | grep -E "CPUTot|RealMemory")
+
+    if echo "$NODE_INFO" | grep -q "CPUTot=2" && echo "$NODE_INFO" | grep -q "RealMemory=1000"; then
+        print_pass "Resource limits configured correctly"
+    else
+        print_fail "Resource limits not configured as expected"
+        print_info "  Node info: $NODE_INFO"
+        return 1
+    fi
+}
+
+# Main test execution
+main() {
+    # Read Slurm version from .env file
+    if [ -f .env ]; then
+        SLURM_VERSION=$(grep SLURM_VERSION .env | cut -d= -f2)
+    else
+        SLURM_VERSION="unknown"
+    fi
+
+    print_header "Slurm Docker Cluster Test Suite (v${SLURM_VERSION})"
+
+    if [ "$CI_MODE" = "true" ]; then
+        print_info "Running in CI mode"
+    fi
+
+    echo ""
+
+    # Run all tests (continue even if some fail)
+    test_containers_running || true
+    test_munge_auth || true
+    test_mysql_connection || true
+    test_slurmdbd_connection || true
+    test_slurmctld_status || true
+    test_compute_nodes || true
+    test_nodes_state || true
+    test_partition || true
+    test_job_submission || true
+    test_job_execution || true
+    test_job_accounting || true
+    test_multi_node_job || true
+    test_resource_limits || true
+
+    # Print summary
+    echo ""
+    print_header "Test Summary"
+    echo -e "Tests Run:    ${BLUE}$TESTS_RUN${NC}"
+    echo -e "Tests Passed: ${GREEN}$TESTS_PASSED${NC}"
+    echo -e "Tests Failed: ${RED}$TESTS_FAILED${NC}"
+    echo ""
+
+    if [ $TESTS_FAILED -eq 0 ]; then
+        echo -e "${GREEN}✓ All tests passed!${NC}"
+
+        # GitHub Actions output
+        if [ "$CI_MODE" = "true" ]; then
+            echo "::notice title=Test Suite::All $TESTS_RUN tests passed successfully"
+        fi
+
+        exit 0
+    else
+        echo -e "${RED}✗ Some tests failed!${NC}"
+
+        # GitHub Actions output
+        if [ "$CI_MODE" = "true" ]; then
+            echo "::error title=Test Suite::$TESTS_FAILED out of $TESTS_RUN tests failed"
+        fi
+
+        exit 1
+    fi
+}
+
+# Run main function
+main

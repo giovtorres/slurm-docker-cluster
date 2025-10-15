@@ -23,6 +23,40 @@ git clone https://github.com/giovtorres/slurm-docker-cluster.git
 cd slurm-docker-cluster
 ```
 
+## 🔢 Choosing Your Slurm Version
+
+This project supports multiple Slurm versions. To select your version, copy `.env.example` to `.env` and set `SLURM_VERSION`:
+
+```bash
+cp .env.example .env
+# Edit .env and set:
+SLURM_VERSION=25.05.3   # Latest stable (default)
+# Or:
+SLURM_VERSION=24.11.6   # Previous stable release
+```
+
+**Supported versions:** 25.05.x, 24.11.x
+
+## 🚀 Quick Start (Using Make)
+
+The easiest way to get started is using the provided Makefile:
+
+```bash
+# Build and start the cluster
+make up
+
+# Run tests to verify everything works
+make test
+
+# View cluster status
+make status
+```
+
+See all available commands:
+```bash
+make help
+```
+
 ## 📦 Containers and Volumes
 
 This setup consists of the following containers:
@@ -30,142 +64,295 @@ This setup consists of the following containers:
 - **mysql**: Stores job and cluster data.
 - **slurmdbd**: Manages the Slurm database.
 - **slurmctld**: The Slurm controller responsible for job and resource management.
+- **slurmrestd**: REST API daemon for HTTP/JSON access to the cluster.
 - **c1, c2**: Compute nodes (running `slurmd`).
 
 ### Persistent Volumes:
 
-- `etc_munge`: Mounted to `/etc/munge`
-- `etc_slurm`: Mounted to `/etc/slurm`
-- `slurm_jobdir`: Mounted to `/data`
-- `var_lib_mysql`: Mounted to `/var/lib/mysql`
-- `var_log_slurm`: Mounted to `/var/log/slurm`
+- `etc_munge`: Mounted to `/etc/munge` - Authentication keys
+- `etc_slurm`: Mounted to `/etc/slurm` - Configuration files (allows live editing)
+- `slurm_jobdir`: Mounted to `/data` - Job files shared across all nodes
+- `var_lib_mysql`: Mounted to `/var/lib/mysql` - Database persistence
+- `var_log_slurm`: Mounted to `/var/log/slurm` - Log files
 
-## 🛠️  Building the Docker Image
+## 🛠️ Building and Starting the Cluster
 
-The version of the Slurm project and the Docker build process can be simplified
-by using a `.env` file, which will be automatically picked up by Docker Compose.
+### Building
 
-Update the `SLURM_TAG` and `IMAGE_TAG` found in the `.env` file and build
-the image:
+The easiest way to build and start the cluster is using Make:
+
+```bash
+# Build images with default version (25.05.3)
+make build
+
+# Or build and start in one command
+make up
+```
+
+To build a different version, update `SLURM_VERSION` in `.env`:
+
+```bash
+make set-version VER=24.11.6
+
+# Build
+make build
+```
+
+Alternatively, use Docker Compose directly:
 
 ```bash
 docker compose build
 ```
 
-Alternatively, you can build the Slurm Docker image locally by specifying the
-[SLURM_TAG](https://github.com/SchedMD/slurm/tags) as a build argument and
-tagging the container with a version ***(IMAGE_TAG)***:
+### Starting
+
+Start the cluster in detached mode:
 
 ```bash
-docker build --build-arg SLURM_TAG="slurm-21-08-6-1" -t slurm-docker-cluster:21.08.6 .
+make up
 ```
 
-## 🚀 Starting the Cluster
-
-Once the image is built, deploy the cluster with the default version of slurm
-using Docker Compose:
+Check cluster status:
 
 ```bash
-docker compose up -d
+make status
 ```
 
-To specify a specific version and override what is configured in `.env`, specify
-the `IMAGE_TAG`:
+View logs:
 
 ```bash
-IMAGE_TAG=21.08.6 docker compose up -d
+make logs
 ```
 
-This will start up all containers in detached mode. You can monitor their status using:
+> **Note**: The cluster automatically registers itself with SlurmDBD on first startup. Wait about 15-20 seconds after starting for all services to become healthy and auto-register.
+
+## 🖥️ Using the Cluster
+
+### Accessing the Controller
+
+Open a shell in the Slurm controller:
 
 ```bash
-docker compose ps
+make shell
+# Or: docker exec -it slurmctld bash
 ```
 
-## 📝 Register the Cluster
-
-After the containers are up and running, register the cluster with **SlurmDBD**:
-
-```bash
-./register_cluster.sh
-```
-
-> **Tip**: Wait a few seconds for the daemons to initialize before running the registration script to avoid connection errors like:
-> `sacctmgr: error: Problem talking to the database: Connection refused`.
-
-For real-time cluster logs, use:
-
-```bash
-docker compose logs -f
-```
-
-## 🖥️  Accessing the Cluster
-
-To interact with the Slurm controller, open a shell inside the `slurmctld` container:
-
-```bash
-docker exec -it slurmctld bash
-```
-
-Now you can run any Slurm command from inside the container:
+Check cluster status:
 
 ```bash
 [root@slurmctld /]# sinfo
 PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-normal*      up 5-00:00:00      2   idle c[1-2]
+normal*      up   infinite      2   idle c[1-2]
 ```
 
-## 🧑‍💻 Submitting Jobs
+### Submitting Jobs
 
-The cluster mounts the `slurm_jobdir` volume across all nodes, making job files accessible from the `/data` directory. To submit a job:
+The `/data` directory is shared across all nodes for job files:
 
 ```bash
 [root@slurmctld /]# cd /data/
 [root@slurmctld data]# sbatch --wrap="hostname"
 Submitted batch job 2
-```
-
-Check the output of the job:
-
-```bash
 [root@slurmctld data]# cat slurm-2.out
 c1
 ```
 
+### Running Example Jobs
+
+Use the included example scripts:
+
+```bash
+make run-examples
+```
+
+This runs sample jobs including simple hostname tests, CPU-intensive workloads, multi-node jobs, and more.
+
 ## 🔄 Cluster Management
 
-### Stopping and Restarting:
-
-Stop the cluster without removing the containers:
+Stop the cluster (keeps data):
 
 ```bash
-docker compose stop
+make down
 ```
 
-Restart it later:
+Restart the cluster:
 
 ```bash
-docker compose start
+make up
 ```
 
-### Deleting the Cluster:
-
-To completely remove the containers and associated volumes:
+Complete cleanup (removes all data and volumes):
 
 ```bash
-docker compose down -v
+make clean
 ```
+
+For more workflows including configuration updates, version switching, and testing, see the **Common Workflows** section below.
 
 ## ⚙️ Advanced Configuration
 
-You can modify Slurm configurations (`slurm.conf`, `slurmdbd.conf`) on the fly without rebuilding the containers. Just run:
+### Live Configuration Updates
 
+With the `etc_slurm` volume mounted, you can modify configurations without rebuilding:
+
+**Method 1 - Direct editing (persists across restarts):**
 ```bash
-./update_slurmfiles.sh slurm.conf slurmdbd.conf
-docker compose restart
+docker exec -it slurmctld vi /etc/slurm/slurm.conf
+make reload-slurm
+```
+
+**Method 2 - Push changes from config/ directory:**
+```bash
+# Edit config files locally in config/25.05/ or config/common/
+vi config/25.05/slurm.conf
+
+# Push to containers (automatically detects version from .env)
+make update-slurm FILES="slurm.conf"
+
+# Or update multiple files
+make update-slurm FILES="slurm.conf slurmdbd.conf"
+```
+
+**Method 3 - Rebuild image with new configs:**
+```bash
+# For permanent changes
+vi config/25.05/slurm.conf
+make rebuild
 ```
 
 This makes it easy to add/remove nodes or test new configuration settings dynamically.
+
+## 📖 Common Workflows
+
+### Using Make (Recommended)
+
+#### First-time Setup:
+```bash
+# Build and start cluster
+make up
+
+# Verify everything is working
+make test
+
+# Check cluster status
+make status
+```
+
+#### Daily Development:
+```bash
+# View logs
+make logs
+
+# Open shell in controller
+make shell
+
+# Inside shell:
+cd /data
+sbatch --wrap="hostname"
+squeue
+```
+
+#### Testing Changes:
+```bash
+# After editing config files
+make down
+make start
+make test
+```
+
+#### Cleanup:
+```bash
+# Stop cluster (keeps data)
+make down
+
+# Complete cleanup (removes all data)
+make clean
+```
+
+### Example: Running Test Jobs
+
+```bash
+# Start cluster
+make start
+
+# Copy example jobs to cluster
+docker cp examples/jobs slurmctld:/data/
+
+# Submit a simple job
+docker exec slurmctld bash -c "cd /data/jobs && sbatch simple_hostname.sh"
+
+# Submit a multi-node job
+docker exec slurmctld bash -c "cd /data/jobs && sbatch multi_node.sh"
+
+# Watch job queue
+docker exec slurmctld squeue
+
+# View job outputs
+docker exec slurmctld bash -c "ls -lh /data/jobs/*.out"
+docker exec slurmctld bash -c "cat /data/jobs/hostname_test_*.out"
+```
+
+### Example: Testing Different Slurm Versions
+
+```bash
+# Check current version
+make version
+
+# Build all supported versions
+make build-all
+
+# Test a specific version
+make test-version VER=24.11.6
+
+# Test all versions (comprehensive)
+make test-all
+
+# Switch to a different version and use it
+make set-version VER=24.11.6
+make rebuild
+make test
+```
+
+### Example: Development Workflow
+
+```bash
+# Morning: Start cluster
+make start
+
+# Work on features, test locally
+make test
+
+# Check logs if issues arise
+make logs
+
+# Evening: Stop cluster
+make down
+
+# Next day: Quick restart
+make start
+```
+
+### Makefile Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `make help` | Show all available commands |
+| `make build` | Build Docker images |
+| `make up` | Start containers |
+| `make down` | Stop containers |
+| `make clean` | Remove containers and volumes |
+| `make logs` | Show container logs |
+| `make test` | Run test suite |
+| `make status` | Show cluster status |
+| `make shell` | Open shell in slurmctld |
+| `make update-slurm FILES="..."` | Update config files from config/ directory |
+| `make reload-slurm` | Reload Slurm config without restart |
+| **Multi-Version Commands** | |
+| `make version` | Show current Slurm version |
+| `make set-version VER=24.11.6` | Set Slurm version in .env |
+| `make build-all` | Build all supported versions |
+| `make test-version VER=24.11.6` | Test a specific version |
+| `make test-all` | Test all supported versions |
 
 ## 🤝 Contributing
 
