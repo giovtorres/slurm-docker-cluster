@@ -1,0 +1,21 @@
+# Slurm RPM Build Macros
+# These macros configure the rpmbuild process for Slurm
+# Based on: https://slurm.schedmd.com/quickstart_admin.html#rpmbuild
+
+# Enable debug symbols and logging
+%_enable_debug     "--enable-debug"
+
+# Installation prefix
+%_prefix           /usr
+
+# Configuration directory
+%_slurm_sysconfdir /etc/slurm
+
+# Library directory (64-bit)
+%_libdir           /usr/lib64
+
+# Enable REST API
+%_with_slurmrestd 1
+
+# MySQL/MariaDB support
+%with_mysql        "--with-mysql_config=/usr/bin"

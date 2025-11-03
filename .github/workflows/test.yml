@@ -1,0 +1,161 @@
+name: Test Slurm Cluster
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  # Build images for all supported versions
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        slurm_version: ['25.05.3', '24.11.6']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for Slurm ${{ matrix.slurm_version }}
+        run: |
+          echo "SLURM_VERSION=${{ matrix.slurm_version }}" > .env
+          docker compose build
+
+      - name: Save Docker image
+        run: |
+          docker save slurm-docker-cluster:${{ matrix.slurm_version }} | gzip > slurm-${{ matrix.slurm_version }}.tar.gz
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slurm-image-${{ matrix.slurm_version }}
+          path: slurm-${{ matrix.slurm_version }}.tar.gz
+          retention-days: 1
+
+  # Test cluster functionality on all versions
+  test-cluster:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        slurm_version: ['25.05.3', '24.11.6']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: slurm-image-${{ matrix.slurm_version }}
+
+      - name: Load Docker image
+        run: |
+          docker load < slurm-${{ matrix.slurm_version }}.tar.gz
+          docker images
+
+      - name: Configure version
+        run: |
+          echo "SLURM_VERSION=${{ matrix.slurm_version }}" > .env
+          cat .env
+
+      - name: Start cluster with 2 nodes
+        run: |
+          docker compose up -d
+          echo "Waiting for services to start..."
+          sleep 15
+
+      - name: Wait for MySQL to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps mysql | grep -q "healthy"; do
+            echo "Waiting for MySQL..."
+            sleep 2
+          done'
+          echo "MySQL is healthy"
+
+      - name: Wait for slurmdbd to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps slurmdbd | grep -q "healthy"; do
+            echo "Waiting for slurmdbd..."
+            sleep 2
+          done'
+          echo "slurmdbd is healthy"
+
+      - name: Wait for slurmctld to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps slurmctld | grep -q "healthy"; do
+            echo "Waiting for slurmctld..."
+            sleep 2
+          done'
+          echo "slurmctld is healthy"
+
+      - name: Wait for slurmrestd to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps slurmrestd | grep -q "healthy"; do
+            echo "Waiting for slurmrestd..."
+            sleep 2
+          done'
+          echo "slurmrestd is healthy"
+
+      - name: Wait for compute nodes to be healthy
+        run: |
+          timeout 90 bash -c 'until docker compose ps c1 | grep -q "healthy" && docker compose ps c2 | grep -q "healthy"; do
+            echo "Waiting for compute nodes..."
+            sleep 2
+          done'
+          echo "All compute nodes are healthy"
+          echo "Waiting for cluster to auto-register with slurmdbd..."
+          sleep 10
+
+      - name: Show cluster status
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps
+          echo ""
+          echo "=== Slurm Info ==="
+          docker exec slurmctld sinfo
+          echo ""
+          echo "=== Node Details ==="
+          docker exec slurmctld scontrol show nodes
+
+      - name: Test REST API
+        run: |
+          echo "=== Testing REST API via Unix Socket ==="
+          # Auto-detect REST API version based on Slurm version
+          if [ "${{ matrix.slurm_version }}" == "24.11.6" ]; then
+            API_VERSION="v0.0.41"
+          else
+            API_VERSION="v0.0.42"
+          fi
+          echo "Using REST API version: $API_VERSION"
+
+          docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
+            http://localhost/slurm/${API_VERSION}/ping
+          echo ""
+          echo "=== REST API Jobs Query ==="
+          docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
+            http://localhost/slurm/${API_VERSION}/jobs | head -20
+
+      - name: Run test suite
+        run: chmod +x test_cluster.sh && ./test_cluster.sh
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Docker Compose Logs ==="
+          docker compose logs
+          echo ""
+          echo "=== Container Status ==="
+          docker compose ps
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v

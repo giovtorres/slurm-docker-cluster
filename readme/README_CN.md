@@ -80,12 +80,7 @@ docker compose ps
 
 在容器启动并处于`running`状态后，通过 **SlurmDBD** 注册集群：
 
-```bash
-./register_cluster.sh
-```
-
-> **提示**: 在容器运行后稍等一会儿，等待守护进程进行初始化完成后在运行注册脚本，以避免类似如下的连接错误：
-> `sacctmgr: error: Problem talking to the database: Connection refused`.
+> **注意**: Slurm 20.02+ 版本在首次启动时会自动向 SlurmDBD 注册集群。在执行 `docker compose up` 后等待约 15-20 秒，以便所有服务健康检查通过并完成自动注册。
 
 如要查看实时日志，使用：
 

@@ -1,0 +1,69 @@
+# Docker volumes and data
+*.log
+
+# Environment files
+.env.local
+.env.*.local
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+.temp/
+tmp/
+
+# Build artifacts
+*.tar
+*.tar.gz
+*.zip
+
+# Local testing files
+test-output/
+*.test
+
+# Git
+*.orig
+*.rej
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Backup files
+*.backup
+*~
+
+# Local overrides
+docker-compose.override.yml
+
+rpmbuild/
+archive/
+.claude/

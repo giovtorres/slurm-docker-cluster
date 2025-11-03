@@ -1,27 +1,36 @@
 services:
   mysql:
-    image: mariadb:10.11
+    image: mariadb:12
     hostname: mysql
     container_name: mysql
     environment:
       MYSQL_RANDOM_ROOT_PASSWORD: "yes"
-      MYSQL_DATABASE: slurm_acct_db
-      MYSQL_USER: slurm
-      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-slurm_acct_db}
+      MYSQL_USER: ${MYSQL_USER:-slurm}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
     volumes:
-      - var_lib_mysql:/var_lib/mysql
+      - var_lib_mysql:/var/lib/mysql
     networks:
       - slurm-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   slurmdbd:
     image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
     build:
       context: .
       args:
-        SLURM_TAG: ${SLURM_TAG:-slurm-25-05-3-1}
+        SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-slurm}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -29,75 +38,116 @@ services:
     expose:
       - "6819"
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     networks:
       - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pidof slurmdbd"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   slurmctld:
     image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
-    build:
-      context: .
-      args:
-        SLURM_TAG: ${SLURM_TAG:-slurm-25-05-3-1}
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
     volumes:
-      - etc_munge:/etc/munge
-      - etc_slurm:/etc/slurm
-      - slurm_jobdir:/data
-      - var_log_slurm:/var/log/slurm
-      - ./cgroup.conf:/etc/slurm/cgroup.conf # <-- ADICIONADO AQUI
+      - etc_munge:/etc/munge:z
+      - etc_slurm:/etc/slurm:z
+      - slurm_jobdir:/data:z
+      - var_log_slurm:/var/log/slurm:z
     expose:
       - "6817"
     depends_on:
-      - "slurmdbd"
+      slurmdbd:
+        condition: service_healthy
     networks:
       - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "scontrol ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  slurmrestd:
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    command: ["slurmrestd"]
+    container_name: slurmrestd
+    hostname: slurmrestd
+    privileged: true
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - var_log_slurm:/var/log/slurm
+    ports:
+      - "6820:6820"
+    expose:
+      - "6820"
+    depends_on:
+      slurmctld:
+        condition: service_healthy
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /var/run/slurmrestd/slurmrestd.socket"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   c1:
     image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
-    build:
-      context: .
-      args:
-        SLURM_TAG: ${SLURM_TAG:-slurm-25-05-3-1}
     command: ["slurmd"]
-    hostname: c1
     container_name: c1
+    hostname: c1
+    privileged: true
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
-      - ./cgroup.conf:/etc/slurm/cgroup.conf # <-- ADICIONADO AQUI
     expose:
       - "6818"
     depends_on:
-      - "slurmctld"
+      slurmctld:
+        condition: service_healthy
     networks:
       - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pidof slurmd"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   c2:
     image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
-    build:
-      context: .
-      args:
-        SLURM_TAG: ${SLURM_TAG:-slurm-25-05-3-1}
     command: ["slurmd"]
-    hostname: c2
     container_name: c2
+    hostname: c2
+    privileged: true
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
-      - ./cgroup.conf:/etc/slurm/cgroup.conf # <-- ADICIONADO AQUI
     expose:
       - "6818"
     depends_on:
-      - "slurmctld"
+      slurmctld:
+        condition: service_healthy
     networks:
       - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pidof slurmd"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 volumes:
   etc_munge:
