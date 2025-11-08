@@ -8,67 +8,29 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  # Build images for all supported versions
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        slurm_version: ['25.05.3', '24.11.6']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image for Slurm ${{ matrix.slurm_version }}
-        run: |
-          echo "SLURM_VERSION=${{ matrix.slurm_version }}" > .env
-          docker compose build
-
-      - name: Save Docker image
-        run: |
-          docker save slurm-docker-cluster:${{ matrix.slurm_version }} | gzip > slurm-${{ matrix.slurm_version }}.tar.gz
-
-      - name: Upload image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: slurm-image-${{ matrix.slurm_version }}
-          path: slurm-${{ matrix.slurm_version }}.tar.gz
-          retention-days: 1
-
-  # Test cluster functionality on all versions
   test-cluster:
-    needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
+      fail-fast: false  # Allow all matrix jobs to complete independently
       matrix:
         slurm_version: ['25.05.3', '24.11.6']
+        runner: ['ubuntu-latest', 'ubuntu-24.04-arm']
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: slurm-image-${{ matrix.slurm_version }}
-
-      - name: Load Docker image
-        run: |
-          docker load < slurm-${{ matrix.slurm_version }}.tar.gz
-          docker images
-
-      - name: Configure version
+      - name: Build and start cluster for Slurm ${{ matrix.slurm_version }} (${{ matrix.arch }})
         run: |
           echo "SLURM_VERSION=${{ matrix.slurm_version }}" > .env
           cat .env
-
-      - name: Start cluster with 2 nodes
-        run: |
+          docker compose build
           docker compose up -d
           echo "Waiting for services to start..."
           sleep 15

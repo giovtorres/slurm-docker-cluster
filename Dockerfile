@@ -10,6 +10,7 @@ ARG SLURM_VERSION
 FROM rockylinux/rockylinux:9 AS builder
 
 ARG SLURM_VERSION
+ARG TARGETARCH
 
 # Enable CRB and EPEL repositories for development packages
 RUN set -ex \
@@ -66,12 +67,19 @@ RUN rpmdev-setuptree
 COPY rpmbuild/slurm.rpmmacros /root/.rpmmacros
 
 # Download official Slurm release tarball and build RPMs with slurmrestd enabled
+# Architecture mapping: Docker TARGETARCH (amd64, arm64) -> RPM arch (x86_64, aarch64)
 RUN set -ex \
+    && RPM_ARCH=$(case "${TARGETARCH}" in \
+         amd64) echo "x86_64" ;; \
+         arm64) echo "aarch64" ;; \
+         *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+       esac) \
+    && echo "Building Slurm RPMs for architecture: ${RPM_ARCH}" \
     && wget -O /root/rpmbuild/SOURCES/slurm-${SLURM_VERSION}.tar.bz2 \
        https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2 \
     && cd /root/rpmbuild/SOURCES \
     && rpmbuild -ta slurm-${SLURM_VERSION}.tar.bz2 \
-    && ls -lh /root/rpmbuild/RPMS/x86_64/
+    && ls -lh /root/rpmbuild/RPMS/${RPM_ARCH}/
 
 # ============================================================================
 # Stage 2: Runtime image
@@ -84,6 +92,7 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
       maintainer="Giovanni Torres"
 
 ARG SLURM_VERSION
+ARG TARGETARCH
 
 # Enable CRB and EPEL repositories for runtime dependencies
 RUN set -ex \
@@ -125,8 +134,9 @@ RUN set -ex \
 ARG GOSU_VERSION=1.19
 
 RUN set -ex \
-    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64" \
-    && wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64.asc" \
+    && echo "Installing gosu for architecture: ${TARGETARCH}" \
+    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-${TARGETARCH}" \
+    && wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-${TARGETARCH}.asc" \
     && export GNUPGHOME="$(mktemp -d)" \
     && gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
     && gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
@@ -134,8 +144,7 @@ RUN set -ex \
     && chmod +x /usr/local/bin/gosu \
     && gosu nobody true
 
-# Copy Slurm RPMs from builder stage
-COPY --from=builder /root/rpmbuild/RPMS/x86_64/*.rpm /tmp/rpms/
+COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
 # Install Slurm RPMs
 RUN set -ex \
@@ -203,7 +212,6 @@ RUN set -ex \
     && rm -rf /tmp/slurm-config
 COPY --chown=slurm:slurm --chmod=0600 examples /root/examples
 
-# Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

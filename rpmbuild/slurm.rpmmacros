@@ -19,3 +19,6 @@
 
 # MySQL/MariaDB support
 %with_mysql        "--with-mysql_config=/usr/bin"
+
+# Disable InfiniBand/OFED support (not available on ARM64 and not needed for Docker-based testing)
+%_without_ofed 1

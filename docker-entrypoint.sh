@@ -81,7 +81,7 @@ then
     if [ -f /proc/self/cgroup ]; then
         # Extract container name from cgroup path
         # Format: 0::/docker/<container_id> or similar
-        CONTAINER_NAME=$(cat /proc/self/cgroup | grep -oP '/docker/\K[^/]+' | head -1)
+        CONTAINER_NAME=$(cat /proc/self/cgroup | sed -n 's|.*/docker/\([^/]*\).*|\1|p' | head -1)
     fi
 
     # If we got a container ID, try to resolve it to a name using the host's /proc

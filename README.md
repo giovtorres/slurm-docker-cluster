@@ -37,6 +37,17 @@ SLURM_VERSION=24.11.6   # Previous stable release
 
 **Supported versions:** 25.05.x, 24.11.x
 
+## 🏗️ Architecture Support
+
+This project supports both **AMD64 (x86_64)** and **ARM64 (aarch64)**
+architectures. The build system automatically detects your architecture. No
+special configuration is needed - simply build and run:
+
+```bash
+make build
+make up
+```
+
 ## 🚀 Quick Start (Using Make)
 
 The easiest way to get started is using the provided Makefile:
@@ -190,6 +201,23 @@ make clean
 For more workflows including configuration updates, version switching, and testing, see the **Common Workflows** section below.
 
 ## ⚙️ Advanced Configuration
+
+### Multi-Architecture Builds
+
+For cross-platform builds or explicit architecture selection (`arm64` or
+`amd64`), use Docker Buildx:
+
+```bash
+docker buildx build \
+  --platform linux/arm64 \
+  --build-arg SLURM_VERSION=25.05.3 \
+  --build-arg TARGETARCH=arm64 \
+  --load \
+  -t slurm-docker-cluster:25.05.3 \
+  .
+```
+
+**Note**: Cross-platform builds use QEMU emulation and may be slower than native builds.
 
 ### Live Configuration Updates
 
