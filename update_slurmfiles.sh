@@ -31,6 +31,9 @@ do
         cgroup.conf)
             SOURCE_FILE="config/common/cgroup.conf"
             ;;
+        gres.conf)
+            SOURCE_FILE="config/common/gres.conf"
+            ;;
         *)
             echo "Warning: Unknown config file '$var', skipping"
             continue
