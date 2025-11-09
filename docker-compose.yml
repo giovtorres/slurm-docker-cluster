@@ -56,6 +56,7 @@ services:
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
+    working_dir: /data
     volumes:
       - etc_munge:/etc/munge:z
       - etc_slurm:/etc/slurm:z
@@ -106,6 +107,7 @@ services:
     command: ["slurmd"]
     container_name: c1
     hostname: c1
+    working_dir: /data
     privileged: true
     volumes:
       - etc_munge:/etc/munge
@@ -131,6 +133,7 @@ services:
     command: ["slurmd"]
     container_name: c2
     hostname: c2
+    working_dir: /data
     privileged: true
     volumes:
       - etc_munge:/etc/munge
