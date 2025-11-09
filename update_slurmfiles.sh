@@ -14,7 +14,7 @@ if [ -z "$SLURM_VERSION" ]; then
 fi
 
 # Extract major.minor version (e.g., 25.05 from 25.05.3)
-VERSION_DIR=$(echo "$SLURM_VERSION" | grep -oP '^\d+\.\d+')
+VERSION_DIR=$(echo "$SLURM_VERSION" | cut -d. -f1-2)
 
 restart=false
 

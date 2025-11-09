@@ -183,7 +183,7 @@ test_job_submission() {
     print_test "Testing job submission..."
 
     # Submit a simple job
-    JOB_ID=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='hostname' 2>&1" | grep -oP 'Submitted batch job \K\d+')
+    JOB_ID=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='hostname' 2>&1" | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
 
     if [ -n "$JOB_ID" ]; then
         print_info "  Job ID: $JOB_ID submitted"

@@ -38,7 +38,7 @@ case $choice in
             job_name=$(basename "$job_script")
             echo -e "${YELLOW}[SUBMIT]${NC} $job_name"
 
-            job_id=$(docker exec slurmctld bash -c "cd /data && sbatch examples/$job_name 2>&1" | grep -oP 'Submitted batch job \K\d+' || echo "")
+            job_id=$(docker exec slurmctld bash -c "cd /data && sbatch examples/$job_name 2>&1" | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
 
             if [ -n "$job_id" ]; then
                 echo -e "${GREEN}  ✓${NC} Job ID: $job_id"
@@ -80,7 +80,7 @@ case $choice in
 
         echo ""
         echo -e "${YELLOW}[SUBMIT]${NC} $job_name"
-        job_id=$(docker exec slurmctld bash -c "cd /data && sbatch examples/$job_name 2>&1" | grep -oP 'Submitted batch job \K\d+' || echo "")
+        job_id=$(docker exec slurmctld bash -c "cd /data && sbatch examples/$job_name 2>&1" | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
 
         if [ -n "$job_id" ]; then
             echo -e "${GREEN}  ✓${NC} Job ID: $job_id submitted"

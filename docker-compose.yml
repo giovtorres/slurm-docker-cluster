@@ -25,6 +25,8 @@ services:
       context: .
       args:
         SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
+      cache_from:
+        - slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
