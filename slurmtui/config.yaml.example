@@ -1,0 +1,51 @@
+# SLURM TUI Monitor Configuration
+
+# SLURM API Settings
+slurm:
+  # Base URL for SLURM REST API
+  api_url: "http://localhost:6820"
+
+  # API version (v0.0.41 for SLURM 24.11.x, v0.0.42 for SLURM 25.05.x)
+  api_version: "v0.0.42"
+
+  # Authentication token (if required)
+  # auth_token: ""
+
+  # Request timeout in seconds
+  timeout: 10
+
+# Application Settings
+app:
+  # Auto-refresh interval in seconds (0 to disable)
+  refresh_interval: 5
+
+  # Color theme: dark or light
+  theme: "dark"
+
+  # Log level: debug, info, warning, error
+  log_level: "info"
+
+# Display Settings
+display:
+  # Show completed jobs in job list
+  show_completed_jobs: false
+
+  # Maximum number of jobs to display
+  max_jobs_display: 100
+
+  # Time format for timestamps
+  time_format: "%Y-%m-%d %H:%M:%S"
+
+  # Show memory in GB instead of MB
+  memory_in_gb: true
+
+  # Compact mode (less spacing)
+  compact: false
+
+# Advanced Settings
+advanced:
+  # Enable debug mode
+  debug: false
+
+  # Cache duration in seconds
+  cache_duration: 30
