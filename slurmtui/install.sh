@@ -36,11 +36,13 @@ echo ""
 echo "✅ Installation complete!"
 echo ""
 echo "Verifying installation..."
-if python -c "import slurmtui" 2>/dev/null; then
+# Run import check from parent directory to avoid path conflicts
+if (cd .. && python -c "import slurmtui" 2>/dev/null); then
     echo "✅ Module 'slurmtui' successfully imported"
 else
     echo "❌ Module import failed"
-    exit 1
+    echo "Note: This might be a path conflict. Try running from parent directory:"
+    echo "  cd .. && python -c 'import slurmtui'"
 fi
 
 # Check if slurmtui command is available

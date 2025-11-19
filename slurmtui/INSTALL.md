@@ -36,22 +36,35 @@ pip install -r requirements.txt
 ### 4. Verify installation
 
 ```bash
+# IMPORTANT: Move out of the slurmtui directory first to avoid path conflicts
+cd ..
+
 # Check if module is importable
 python -c "import slurmtui; print('✅ slurmtui installed successfully')"
 
 # Check if command is available
 which slurmtui  # Should show the path to the executable
+
+# Try running it
+slurmtui --help
 ```
 
 ## Troubleshooting Installation Issues
 
 ### Error: "ModuleNotFoundError: No module named 'slurmtui'"
 
-**Solution 1: Reinstall in editable mode**
+**Important**: If you see this error when running the install script but the installation said "Successfully installed slurmtui-0.1.0", the installation likely succeeded! This is a Python path conflict when importing from inside the package directory.
+
+**Solution 1: Test from parent directory**
 ```bash
-cd slurm-docker-cluster/slurmtui
-pip uninstall slurmtui -y
-pip install -e .
+# Move out of the slurmtui directory
+cd ..
+
+# Test import (should work)
+python -c "import slurmtui; print('✅ Installation successful!')"
+
+# Run the command
+slurmtui
 ```
 
 **Solution 2: Run directly as a module**
@@ -60,7 +73,17 @@ cd slurm-docker-cluster
 python -m slurmtui
 ```
 
-**Solution 3: Check Python path**
+**Solution 3: Reinstall if truly missing**
+```bash
+cd slurm-docker-cluster/slurmtui
+pip uninstall slurmtui -y
+pip install -e .
+
+# Then test from parent directory
+cd .. && python -c "import slurmtui"
+```
+
+**Solution 4: Check Python path**
 ```bash
 # Ensure you're using the right Python
 which python
