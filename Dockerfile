@@ -13,15 +13,13 @@ ARG SLURM_VERSION
 ARG TARGETARCH
 
 # Enable CRB and EPEL repositories for development packages
+# Install RPM build tools and dependencies
 RUN set -ex \
     && dnf makecache \
     && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
-    && dnf makecache
-
-# Install RPM build tools and dependencies
-RUN set -ex \
+    && dnf makecache \
     && dnf -y install \
        autoconf \
        automake \
