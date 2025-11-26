@@ -1,0 +1,192 @@
+########################
+# SLURM DOCKER CLUSTER #
+########################
+
+## VOLUMES
+volumes:
+  etc_munge:
+  etc_slurm:
+  slurm_jobdir:
+  var_lib_mysql:
+  var_log_slurm:
+  entry:
+  grafana_lib:
+  es_logs:
+    
+## SERVICES
+services:
+  slurm-base:
+    image: slurm-docker-cluster:24-11-5
+    build:
+      context: .
+      dockerfile: Dockerfile 
+      args:
+        SLURM_TAG: slurm-24-11-5   
+    volumes:
+      - var_lib_mysql:/var/lib/mysql
+    networks:
+      - slurm_net      
+
+  # MariaDB
+  mysql:
+    image: mariadb:11
+    hostname: mysql
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: testtest
+      MYSQL_DATABASE: slurm_acct_db
+      MYSQL_USER: slurm
+      MYSQL_PASSWORD: password
+    volumes:
+      - var_lib_mysql:/var/lib/mysql
+    networks:
+      - slurm_net
+
+
+  # SlurmDBd
+  slurmdbd:
+    image: slurm-docker-cluster:24-11-5
+    command: ["slurmdbd"]
+    container_name: slurmdbd
+    hostname: slurmdbd
+    environment: 
+      PUID: 990
+      GUID: 990
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - var_log_slurm:/var/log/slurm
+      - entry:/usr/local/bin
+    expose:
+      - "6819"
+    depends_on:
+      - mysql
+    networks:
+      - slurm_net
+
+
+  # Slurmctld
+  slurmctld:
+    image: slurm-docker-cluster:24-11-5
+    command: ["slurmctld"]
+    container_name: slurmctld
+    hostname: slurmctld
+    environment: 
+      PUID: 990
+      GUID: 990
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+      - entry:/usr/local/bin
+    expose:
+      - "6817"
+      - "6820"
+    depends_on:
+      - "slurmdbd"
+      - "elasticsearch"
+    networks:
+      - slurm_net
+
+  # Compute node 1
+  compute1:
+    image: slurm-docker-cluster:24-11-5
+    privileged: true
+    command: ["slurmd"]
+    hostname: compute1
+    container_name: compute1
+    environment: 
+      PUID: 990
+      GUID: 990
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+      - entry:/usr/local/bin
+    expose:
+      - "6818"
+    depends_on:
+      - "slurmctld"
+    networks:
+      - slurm_net
+
+  # # Compute node 2
+  # compute2:
+  #   image: slurm-docker-cluster:slurm-docker-cluster:24-11-5
+  #   privileged: true
+  #   command: ["slurmd"]
+  #   hostname: compute2
+  #   container_name: compute2
+  #   environment: 
+  #     PUID: 990
+  #     GUID: 990
+  #   volumes:
+  #     - etc_munge:/etc/munge
+  #     - etc_slurm:/etc/slurm
+  #     - slurm_jobdir:/data
+  #     - var_log_slurm:/var/log/slurm
+  #   expose:
+  #     - "6818"
+  #   depends_on:
+  #     - "slurmctld"
+
+  slurmrestd:
+    image: slurm-docker-cluster:24-11-5
+    container_name: slurmrestd
+    privileged: true
+    command: ["slurmrestd"]
+    hostname: slurmrestd
+    depends_on:
+      - slurmctld
+    ports:
+      - "6820:6820"      
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - entry:/usr/local/bin
+    networks:
+      - slurm_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    hostname: grafana
+    ports:
+       - "3000:3000"
+    depends_on: ["mysql", "slurmdbd", "slurmrestd" ]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+
+    volumes: 
+      - grafana_lib:/var/lib/grafana
+    networks:
+      - slurm_net
+      
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+
+    ports: 
+      - "9200:9200"
+
+    ulimits: 
+      memlock: {soft: -1, hard: -1}
+
+    volumes: 
+      - es_logs:/var/log/slurm/elasticsearch
+
+    networks:
+      - slurm_net
+
+networks:
+  slurm_net:
+    name: slurm_net
+    driver: bridge
