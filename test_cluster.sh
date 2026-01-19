@@ -272,6 +272,60 @@ test_resource_limits() {
     fi
 }
 
+test_singularity_pull_image() {
+    print_test "Testing Singularity image pull..."
+
+    # Check if alpine_latest.sif exists, if yes, remove it
+    if docker exec slurmctld test -f alpine_latest.sif >/dev/null 2>&1; then
+        docker exec slurmctld rm alpine_latest.sif >/dev/null 2>&1 || true
+    fi
+
+    if docker exec slurmctld singularity pull docker://alpine:latest >/dev/null 2>&1; then
+        print_pass "Singularity image pull successful"
+    else
+        print_fail "Singularity image pull failed"
+        return 1
+    fi
+}
+
+test_singularity_multi_node_job() {
+    print_test "Testing Singularity multi-node job..."
+
+    # Get current node count
+    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+
+    # Only run multi-node test if we have 2+ nodes
+    if [ "$NODE_COUNT" -lt 2 ]; then
+        print_info "  Skipping (only $NODE_COUNT node available)"
+        return 0
+    fi
+
+    # Check if alpine_latest.sif exists, if not, pull it
+    if ! docker exec slurmctld test -f alpine_latest.sif >/dev/null 2>&1; then
+        if ! docker exec slurmctld singularity pull docker://alpine:latest >/dev/null 2>&1; then
+            print_fail "Failed to pull Singularity image"
+            return 1
+        fi
+    fi
+
+    # Run the multi-node singularity job
+    JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 singularity exec alpine_latest.sif /bin/sh -c 'cat /etc/alpine-release'" 2>&1 || echo "FAILED")
+
+    # Count non-empty lines in output (should be 2 Alpine release lines)
+    OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l)
+
+    # Clean up the image
+    docker exec slurmctld rm alpine_latest.sif >/dev/null 2>&1 || true
+
+    if [ "$OUTPUT_LINES" -eq 2 ]; then
+        print_pass "Singularity multi-node job executed successfully on 2 nodes"
+    else
+        print_fail "Singularity multi-node job failed"
+        print_info "  Output: $JOB_OUTPUT"
+        return 1
+    fi
+}
+
 # Main test execution
 main() {
     # Read Slurm version from .env file
@@ -303,6 +357,8 @@ main() {
     test_job_accounting || true
     test_multi_node_job || true
     test_resource_limits || true
+    test_singularity_pull_image || true
+    test_singularity_multi_node_job || true
 
     # Print summary
     echo ""
