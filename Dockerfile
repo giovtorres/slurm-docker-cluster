@@ -147,6 +147,18 @@ RUN set -ex \
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
+# Install SSHD and set default root password
+ARG ROOT_PASSWORD
+RUN dnf -y install openssh-server openssh-clients; \
+    sed -i 's/^\(UsePAM yes\)/# \1/' /etc/ssh/sshd_config; \
+    ssh-keygen -q -t rsa -b 2048 -f /etc/ssh/ssh_host_rsa_key -N '' && \
+    ssh-keygen -q -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key -N '' && \
+    ssh-keygen -t dsa -f /etc/ssh/ssh_host_ed25519_key  -N ''; \
+    sed -i 's/^#\(PermitRootLogin\) .*/\1 yes/' /etc/ssh/sshd_config; \
+    echo "root:${ROOT_PASSWORD}" | chpasswd ; \
+    rm -f /run/nologin; \
+    dnf clean all;
+
 # Install Slurm RPMs
 RUN set -ex \
     && dnf -y install /tmp/rpms/slurm-[0-9]*.rpm \
