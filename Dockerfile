@@ -156,6 +156,13 @@ RUN set -ex \
     && rm -rf /tmp/rpms \
     && dnf clean all
 
+# Install Singularity
+RUN set -ex \
+    && dnf -y install \
+       apptainer \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
 # Create slurm user and group
 RUN set -x \
     && groupadd -r --gid=990 slurm \
