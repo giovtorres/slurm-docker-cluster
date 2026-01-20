@@ -25,6 +25,7 @@ services:
       context: .
       args:
         SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
+        ROOT_PASSWORD: ${ROOT_PASSWORD:-password}
       cache_from:
         - slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
     command: ["slurmdbd"]
@@ -63,8 +64,11 @@ services:
       - etc_slurm:/etc/slurm:z
       - slurm_jobdir:/data:z
       - var_log_slurm:/var/log/slurm:z
+    ports:
+      - "3022:22"
     expose:
       - "6817"
+      - "22"
     depends_on:
       slurmdbd:
         condition: service_healthy
