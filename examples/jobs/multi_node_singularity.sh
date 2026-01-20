@@ -18,12 +18,16 @@ singularity pull docker://alpine:3.22.2
 echo ""
 
 # Run hostname on each allocated node inside Alpine singularity container
-# Also show Alpine versiob.
+# Also show Alpine version.
 srun singularity exec alpine_3.22.2.sif /bin/sh -c \
     "echo 'Container OS:'; \
      cat /etc/alpine-release; \
      echo 'Actual Hostname:'; \
      hostname; \
-     echo '';" 
+     echo '';"
 
 echo "All tasks completed"
+echo ""
+
+echo "Clean up pulled .sif file."
+rm alpine_3.22.2.sif

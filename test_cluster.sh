@@ -275,12 +275,12 @@ test_resource_limits() {
 test_singularity_pull_image() {
     print_test "Testing Singularity image pull..."
 
-    # Check if alpine_latest.sif exists, if yes, remove it
-    if docker exec slurmctld test -f alpine_latest.sif >/dev/null 2>&1; then
-        docker exec slurmctld rm alpine_latest.sif >/dev/null 2>&1 || true
+    # Check if alpine_3.22.2.sif exists, if yes, remove it
+    if docker exec slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
+        docker exec slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
     fi
 
-    if docker exec slurmctld singularity pull docker://alpine:latest >/dev/null 2>&1; then
+    if docker exec slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
         print_pass "Singularity image pull successful"
     else
         print_fail "Singularity image pull failed"
@@ -300,22 +300,22 @@ test_singularity_multi_node_job() {
         return 0
     fi
 
-    # Check if alpine_latest.sif exists, if not, pull it
-    if ! docker exec slurmctld test -f alpine_latest.sif >/dev/null 2>&1; then
-        if ! docker exec slurmctld singularity pull docker://alpine:latest >/dev/null 2>&1; then
+    # Check if alpine_3.22.2.sif exists, if not, pull it
+    if ! docker exec slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
+        if ! docker exec slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
             print_fail "Failed to pull Singularity image"
             return 1
         fi
     fi
 
     # Run the multi-node singularity job
-    JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 singularity exec alpine_latest.sif /bin/sh -c 'cat /etc/alpine-release'" 2>&1 || echo "FAILED")
+    JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 singularity exec alpine_3.22.2.sif /bin/sh -c 'cat /etc/alpine-release'" 2>&1 || echo "FAILED")
 
     # Count non-empty lines in output (should be 2 Alpine release lines)
     OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l)
 
     # Clean up the image
-    docker exec slurmctld rm alpine_latest.sif >/dev/null 2>&1 || true
+    docker exec slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
 
     if [ "$OUTPUT_LINES" -eq 2 ]; then
         print_pass "Singularity multi-node job executed successfully on 2 nodes"
