@@ -78,7 +78,10 @@ then
     # Note: slurmrestd should NOT be run as SlurmUser or root (security requirement)
     mkdir -p /var/run/slurmrestd
     chown slurmrest:slurmrest /var/run/slurmrestd
-    exec gosu slurmrest /usr/sbin/slurmrestd -vvv unix:/var/run/slurmrestd/slurmrestd.socket 0.0.0.0:6820
+
+    # Export the SLURM_JWT=daemon environment variable before starting the slurmrestd daemon
+    # to activate AuthAltTypes=auth/jwt as the primary authentication mechanism
+    export SLURM_JWT=daemon; exec gosu slurmrest /usr/sbin/slurmrestd -vvv unix:/var/run/slurmrestd/slurmrestd.socket 0.0.0.0:6820
 fi
 
 if [ "$1" = "slurmd" ]
