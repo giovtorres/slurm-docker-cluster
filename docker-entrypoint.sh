@@ -29,8 +29,11 @@ fi
 if [ "$1" = "slurmctld" ]
 then
 
-    echo "---> Start SSHD ..."
-    exec /usr/sbin/sshd -D -e &
+    if [ "$SSH_ENABLE" = "true" ]
+    then
+        echo "---> Start SSHD ..."
+        exec /usr/sbin/sshd -D -e &
+    fi
 
     echo "---> Waiting for slurmdbd to become active before starting slurmctld ..."
 
