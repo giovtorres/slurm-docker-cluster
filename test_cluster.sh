@@ -326,6 +326,97 @@ test_singularity_multi_node_job() {
     fi
 }
 
+test_get_jwt_token() {
+    print_test "Testing JWT token generation..."
+
+    # Get JWT token from scontrol
+    TOKEN_OUTPUT=$(docker exec slurmctld scontrol token 2>&1)
+
+    # Extract token value (format: SLURM_JWT=eyJhb...)
+    if echo "$TOKEN_OUTPUT" | grep -q "SLURM_JWT="; then
+        JWT_TOKEN=$(echo "$TOKEN_OUTPUT" | grep "SLURM_JWT=" | cut -d'=' -f2)
+
+        if [ -z "$JWT_TOKEN" ]; then
+            print_fail "JWT token is empty"
+            return 1
+        fi
+
+        print_info "  JWT Token: ${JWT_TOKEN:0:50}..."
+
+        # Validate JWT token format (should have 3 parts separated by dots)
+        DOT_COUNT=$(echo "$JWT_TOKEN" | grep -o '\.' | wc -l)
+
+        if [ "$DOT_COUNT" -eq 2 ]; then
+            # Verify each part contains valid base64-like characters
+            HEADER=$(echo "$JWT_TOKEN" | cut -d'.' -f1)
+            PAYLOAD=$(echo "$JWT_TOKEN" | cut -d'.' -f2)
+            SIGNATURE=$(echo "$JWT_TOKEN" | cut -d'.' -f3)
+
+            if [ -n "$HEADER" ] && [ -n "$PAYLOAD" ] && [ -n "$SIGNATURE" ]; then
+                print_pass "Valid JWT token generated (3 valid parts)"
+            else
+                print_fail "JWT token has empty parts"
+                return 1
+            fi
+        else
+            print_fail "Invalid JWT token format (expected 3 parts separated by dots, got $((DOT_COUNT + 1)))"
+            print_info "  Token: $JWT_TOKEN"
+            return 1
+        fi
+    else
+        print_fail "Failed to get JWT token or invalid output format"
+        print_info "  Output: $TOKEN_OUTPUT"
+        return 1
+    fi
+}
+
+test_validate_jwt_authentication() {
+    print_test "Testing JWT authentication via slurmrestd..."
+
+    # Get JWT token from scontrol
+    TOKEN_OUTPUT=$(docker exec slurmctld scontrol token 2>&1)
+
+    # Extract token value (format: SLURM_JWT=eyJhb...)
+    if ! echo "$TOKEN_OUTPUT" | grep -q "SLURM_JWT="; then
+        print_fail "Failed to get JWT token"
+        print_info "  Output: $TOKEN_OUTPUT"
+        return 1
+    fi
+
+    JWT_TOKEN=$(echo "$TOKEN_OUTPUT" | grep "SLURM_JWT=" | cut -d'=' -f2)
+
+    if [ -z "$JWT_TOKEN" ]; then
+        print_fail "JWT token is empty"
+        return 1
+    fi
+
+    print_info "  Using JWT Token: ${JWT_TOKEN:0:50}..."
+
+    # Get the latest data_parser version from slurmrestd
+    DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
+
+    if [ -z "$DATA_PARSER_VERSION" ]; then
+        print_fail "Failed to detect data_parser version"
+        return 1
+    fi
+
+    print_info "  Using data_parser version: $DATA_PARSER_VERSION"
+
+    # Execute curl request with JWT token and check HTTP status code
+    HTTP_CODE=$(docker exec slurmctld bash -c "curl -s -o /dev/null -w '%{http_code}' -k \
+        -H 'X-SLURM-USER-TOKEN: $JWT_TOKEN' \
+        -X GET 'http://slurmrestd:6820/slurm/$DATA_PARSER_VERSION/diag'" 2>&1)
+
+    print_info "  HTTP Status Code: $HTTP_CODE"
+
+    if [ "$HTTP_CODE" = "200" ]; then
+        print_pass "JWT authentication successful (HTTP 200)"
+    else
+        print_fail "JWT authentication failed (HTTP $HTTP_CODE, expected 200)"
+        return 1
+    fi
+}
+
 # Main test execution
 main() {
     # Read Slurm version from .env file
@@ -359,6 +450,8 @@ main() {
     test_resource_limits || true
     test_singularity_pull_image || true
     test_singularity_multi_node_job || true
+    test_get_jwt_token || true
+    test_validate_jwt_authentication || true
 
     # Print summary
     echo ""
