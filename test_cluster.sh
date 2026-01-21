@@ -393,7 +393,7 @@ test_validate_jwt_authentication() {
     print_info "  Using JWT Token: ${JWT_TOKEN:0:50}..."
 
     # Get the latest data_parser version from slurmrestd
-    DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
+    DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
 
     if [ -z "$DATA_PARSER_VERSION" ]; then
         print_fail "Failed to detect data_parser version"
