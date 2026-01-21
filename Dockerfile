@@ -124,7 +124,6 @@ RUN set -ex \
        vim-enhanced \
        wget \
        libjwt \
-       libjwt-devel \
     && dnf clean all \
     && rm -rf /var/cache/dnf \
     && alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
@@ -210,15 +209,6 @@ RUN set -ex \
     && chmod 600 /etc/slurm/slurmdbd.conf \
     && rm -rf /tmp/slurm-config
 COPY --chown=slurm:slurm --chmod=0600 examples /root/examples
-
-# Prepare jwt key for jwt/auth
-RUN set -ex \
-    && mkdir -p /var/spool/slurm/statesave \
-    && dd if=/dev/random of=/var/spool/slurm/statesave/jwt_hs256.key bs=32 count=1 \
-    && chown slurm:slurm /var/spool/slurm/statesave/jwt_hs256.key \
-    && chmod 0600 /var/spool/slurm/statesave/jwt_hs256.key \
-    && chown slurm:slurm /var/spool/slurm/statesave \
-    && chmod 0755 /var/spool/slurm/statesave
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

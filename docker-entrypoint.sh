@@ -14,6 +14,13 @@ then
     chown slurm:slurm /etc/slurm/slurmdbd.conf
     chmod 600 /etc/slurm/slurmdbd.conf
 
+    # create jwt key for jwt/auth
+    if [ ! -f /etc/slurm/jwt_hs256.key ]; then
+        dd if=/dev/random of=/etc/slurm/jwt_hs256.key bs=32 count=1
+        chown slurm:slurm /etc/slurm/jwt_hs256.key
+        chmod 0600 /etc/slurm/jwt_hs256.key
+    fi
+
     # Wait for MySQL using environment variables directly
     until echo "SELECT 1" | mysql -h mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} 2>&1 > /dev/null
     do
