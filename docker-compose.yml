@@ -26,7 +26,6 @@ services:
       args:
         SLURM_VERSION: ${SLURM_VERSION:-25.11.2}
         SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
-        ROOT_PASSWORD: ${ROOT_PASSWORD:-password}
       cache_from:
         - slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
     command: ["slurmdbd"]
@@ -61,14 +60,16 @@ services:
     privileged: true
     working_dir: /data
     environment:
-      ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST:-}
+      - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-}
+      - SSH_ENABLE=${SSH_ENABLE:-false}
     volumes:
       - etc_munge:/etc/munge:z
       - etc_slurm:/etc/slurm:z
       - slurm_jobdir:/data:z
       - var_log_slurm:/var/log/slurm:z
+      - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/root/.ssh/authorized_keys:ro
     ports:
-      - "3022:22"
+      - "${SSH_PORT:-3022}:22"
     expose:
       - "6817"
       - "22"
