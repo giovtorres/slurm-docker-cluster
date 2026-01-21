@@ -155,6 +155,57 @@ services:
       retries: 3
       start_period: 20s
 
+  g1:
+    image: slurm-docker-cluster-gpu:${SLURM_VERSION:-25.05.3}
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+      args:
+        SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
+    # runtime: nvidia
+    command: ["slurmd"]
+    container_name: g1
+    hostname: g1
+    # privileged: true
+    # gpus: "all"
+    # gpus:
+    #   - device: "0"  # Expose only GPU 0
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      NVIDIA_VISIBLE_DEVICES: 0  # Expose only GPU 0
+    # Give Slurm just enough to manage cgroup v2 without systemd
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+      - seccomp:unconfined
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']  # Explicitly specify GPU 0
+              capabilities: [gpu]
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6818"
+    depends_on:
+      slurmctld:
+        condition: service_healthy
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pidof slurmd"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
 volumes:
   etc_munge:
   etc_slurm:
