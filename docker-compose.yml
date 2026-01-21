@@ -58,6 +58,8 @@ services:
     hostname: slurmctld
     privileged: true
     working_dir: /data
+    environment:
+      ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST:-}
     volumes:
       - etc_munge:/etc/munge:z
       - etc_slurm:/etc/slurm:z
@@ -155,12 +157,60 @@ services:
       retries: 3
       start_period: 20s
 
+  # Optional Elasticsearch for job completion logging
+  # Start with: docker compose --profile monitoring up -d
+  #   or with: make up-with-monitoring
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    profiles: ["monitoring"]
+    container_name: elasticsearch
+    hostname: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    expose:
+      - "9200"
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Kibana for visualizing Elasticsearch job completions
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.3.0
+    profiles: ["monitoring"]
+    container_name: kibana
+    hostname: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
 volumes:
   etc_munge:
   etc_slurm:
   slurm_jobdir:
   var_lib_mysql:
   var_log_slurm:
+  elasticsearch_data:
 
 networks:
   slurm-network:

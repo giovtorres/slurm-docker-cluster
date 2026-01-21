@@ -340,14 +340,105 @@ test_python_version() {
     fi
 }
 
+# Detect REST API version based on Slurm version
+get_api_version() {
+    local slurm_version="$1"
+
+    # Extract major.minor version (e.g., "25.05" from "25.05.3")
+    local major_minor=$(echo "$slurm_version" | cut -d. -f1,2)
+
+    case "$major_minor" in
+        "24.11")
+            echo "v0.0.41"
+            ;;
+        "25.05")
+            echo "v0.0.42"
+            ;;
+        *)
+            # Default to latest
+            echo "v0.0.42"
+            ;;
+    esac
+}
+
+test_rest_api_nodes() {
+    print_test "Testing REST API /nodes endpoint (README example)..."
+
+    # Detect API version
+    API_VERSION=$(get_api_version "$SLURM_VERSION")
+    print_info "  Using API version: $API_VERSION"
+
+    # Test the exact command from README
+    RESPONSE=$(docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
+        "http://localhost/slurm/${API_VERSION}/nodes" 2>&1)
+
+    # Check if response is valid JSON
+    if echo "$RESPONSE" | jq empty 2>/dev/null; then
+        print_info "  ✓ Response is valid JSON"
+
+        # Check for expected fields and node data
+        if echo "$RESPONSE" | jq -e '.nodes' >/dev/null 2>&1; then
+            NODE_COUNT=$(echo "$RESPONSE" | jq '.nodes | length')
+            print_info "  ✓ Found $NODE_COUNT node(s)"
+            print_pass "REST API /nodes endpoint works correctly"
+        else
+            print_fail "REST API /nodes response missing 'nodes' field"
+            print_info "  Response: $RESPONSE"
+            return 1
+        fi
+    else
+        print_fail "REST API /nodes returned invalid JSON"
+        print_info "  Response: $RESPONSE"
+        return 1
+    fi
+}
+
+test_rest_api_partitions() {
+    print_test "Testing REST API /partitions endpoint (README example)..."
+
+    # Detect API version
+    API_VERSION=$(get_api_version "$SLURM_VERSION")
+
+    # Test the exact command from README
+    RESPONSE=$(docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
+        "http://localhost/slurm/${API_VERSION}/partitions" 2>&1)
+
+    # Check if response is valid JSON
+    if echo "$RESPONSE" | jq empty 2>/dev/null; then
+        print_info "  ✓ Response is valid JSON"
+
+        # Check for expected fields
+        if echo "$RESPONSE" | jq -e '.partitions' >/dev/null 2>&1; then
+            PARTITION_COUNT=$(echo "$RESPONSE" | jq '.partitions | length')
+            print_info "  ✓ Found $PARTITION_COUNT partition(s)"
+            print_pass "REST API /partitions endpoint works correctly"
+        else
+            print_fail "REST API /partitions response missing 'partitions' field"
+            print_info "  Response: $RESPONSE"
+            return 1
+        fi
+    else
+        print_fail "REST API /partitions returned invalid JSON"
+        print_info "  Response: $RESPONSE"
+        return 1
+    fi
+}
+
 # Main test execution
 main() {
-    # Read Slurm version from .env file
-    if [ -f .env ]; then
-        SLURM_VERSION=$(grep SLURM_VERSION .env | cut -d= -f2)
-    else
-        SLURM_VERSION="unknown"
+    # Ensure .env exists - copy from .env.example if not present
+    if [ ! -f .env ]; then
+        if [ -f .env.example ]; then
+            cp .env.example .env
+            echo "Created .env from .env.example"
+        else
+            echo "ERROR: Neither .env nor .env.example found"
+            exit 1
+        fi
     fi
+
+    # Read Slurm version from .env file
+    SLURM_VERSION=$(grep SLURM_VERSION .env | cut -d= -f2)
 
     print_header "Slurm Docker Cluster Test Suite (v${SLURM_VERSION})"
 
@@ -374,6 +465,8 @@ main() {
     test_python_version || true
     test_singularity_pull_image || true
     test_singularity_multi_node_job || true
+    test_rest_api_nodes || true
+    test_rest_api_partitions || true
 
     # Print summary
     echo ""

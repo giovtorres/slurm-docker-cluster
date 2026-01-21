@@ -1,11 +1,17 @@
-.PHONY: help build build-no-cache up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version
+.PHONY: help build build-no-cache up start down clean logs test test-monitoring status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples
 
 # Default target
 .DEFAULT_GOAL := help
 
 # Supported Slurm versions
 SUPPORTED_VERSIONS := 24.11.6 25.05.3
-DEFAULT_VERSION := 25.05.3
+# Read default version from .env.example (source of truth)
+DEFAULT_VERSION := $(shell grep '^SLURM_VERSION=' .env.example | cut -d= -f2)
+
+# Auto-detect monitoring profile based on .env configuration
+# If ELASTICSEARCH_HOST is set, automatically enable monitoring profile
+ELASTICSEARCH_HOST := $(shell grep -E '^ELASTICSEARCH_HOST=' .env 2>/dev/null | cut -d= -f2)
+PROFILE_FLAG := $(if $(ELASTICSEARCH_HOST),--profile monitoring,)
 
 # Colors for help output
 CYAN := $(shell tput -Txterm setaf 6)
@@ -16,12 +22,12 @@ help:  ## Show this help message
 	@echo "=========================================="
 	@echo ""
 	@echo "Cluster Management:"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "build" "Build Docker images"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "build-no-cache" "Build Docker images without cache"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "up" "Start containers"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "down" "Stop containers"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "clean" "Remove containers and volumes"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "rebuild" "Clean, rebuild, and start"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "build" "Build Docker images"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "build-no-cache" "Build Docker images without cache"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "up" "Start containers"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "down" "Stop containers"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "clean" "Remove containers and volumes"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "rebuild" "Clean, rebuild, and start"
 	@echo ""
 	@echo "Quick Commands:"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "jobs" "View job queue"
@@ -37,6 +43,7 @@ help:  ## Show this help message
 	@echo "Development & Testing:"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "shell" "Open shell in slurmctld"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test" "Run test suite"
+	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-monitoring" "Run monitoring profile tests"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "quick-test" "Submit a quick test job"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "run-examples" "Run example jobs"
 	@echo ""
@@ -51,6 +58,10 @@ help:  ## Show this help message
 	@echo "  make update-slurm FILES=\"slurm.conf slurmdbd.conf\""
 	@echo "  make set-version VER=24.11.6"
 	@echo "  make test-version VER=24.11.6"
+	@echo ""
+	@echo "Monitoring:"
+	@echo "  Enable:  Set ELASTICSEARCH_HOST=http://elasticsearch:9200 in .env"
+	@echo "  Disable: Comment out or remove ELASTICSEARCH_HOST from .env"
 
 build:  ## Build Docker images
 	docker compose --progress plain build
@@ -58,20 +69,23 @@ build:  ## Build Docker images
 build-no-cache:  ## Build Docker images without cache
 	docker compose --progress plain build --no-cache
 
-up:  ## Start containers
-	docker compose up -d
+up:  ## Start containers (auto-enables monitoring if ELASTICSEARCH_HOST is set in .env)
+	docker compose $(PROFILE_FLAG) up -d
 
 down:  ## Stop containers
-	docker compose down
+	docker compose $(PROFILE_FLAG) down
 
 clean:  ## Remove containers and volumes
-	docker compose down -v
+	docker compose $(PROFILE_FLAG) down -v
 
 logs:  ## Show container logs
 	docker compose logs -f
 
 test:  ## Run test suite
 	./test_cluster.sh
+
+test-monitoring:  ## Run monitoring profile test suite
+	./test_monitoring.sh
 
 status:  ## Show cluster status
 	@echo "=== Containers ==="
