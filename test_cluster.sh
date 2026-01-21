@@ -325,7 +325,7 @@ test_singularity_multi_node_job() {
         return 1
     fi
 }
-       
+
 test_get_jwt_token() {
     print_test "Testing JWT token generation..."
 
@@ -392,10 +392,20 @@ test_validate_jwt_authentication() {
 
     print_info "  Using JWT Token: ${JWT_TOKEN:0:50}..."
 
+    # Get the latest data_parser version from slurmrestd
+    DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
+
+    if [ -z "$DATA_PARSER_VERSION" ]; then
+        print_fail "Failed to detect data_parser version"
+        return 1
+    fi
+
+    print_info "  Using data_parser version: $DATA_PARSER_VERSION"
+
     # Execute curl request with JWT token and check HTTP status code
     HTTP_CODE=$(docker exec slurmctld bash -c "curl -s -o /dev/null -w '%{http_code}' -k \
         -H 'X-SLURM-USER-TOKEN: $JWT_TOKEN' \
-        -X GET 'http://slurmrestd:6820/slurm/v0.0.40/diag'" 2>&1)
+        -X GET 'http://slurmrestd:6820/slurm/$DATA_PARSER_VERSION/diag'" 2>&1)
 
     print_info "  HTTP Status Code: $HTTP_CODE"
 
