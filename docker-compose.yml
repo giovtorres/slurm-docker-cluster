@@ -72,7 +72,6 @@ services:
       - "${SSH_PORT:-3022}:22"
     expose:
       - "6817"
-      - "22"
     depends_on:
       slurmdbd:
         condition: service_healthy
