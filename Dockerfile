@@ -144,6 +144,16 @@ RUN set -ex \
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
+# Install SSHD and allow ssh key for root login
+RUN set -ex \
+    && dnf -y install \
+       openssh-server \
+    && rm -rf /var/cache/dnf \
+    && dnf clean all \
+    && ssh-keygen -A \
+    && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
 # Install Slurm RPMs
 RUN set -ex \
     && dnf -y install /tmp/rpms/slurm-[0-9]*.rpm \
