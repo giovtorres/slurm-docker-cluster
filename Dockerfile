@@ -7,19 +7,22 @@ ARG SLURM_VERSION
 # ============================================================================
 # Stage 1: Build RPMs
 # ============================================================================
-FROM rockylinux/rockylinux:9 AS builder
+FROM rockylinux/rockylinux:10 AS builder
 
 ARG SLURM_VERSION
 ARG TARGETARCH
 
 # Enable CRB and EPEL repositories for development packages
 # Install RPM build tools and dependencies
+# (Temporarily adding http-parser packages from EL9. Waiting for this issue: https://support.schedmd.com/show_bug.cgi?id=21801)
 RUN set -ex \
     && dnf makecache \
     && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
+    && dnf -y install https://download.rockylinux.org/pub/rocky/9/AppStream/x86_64/os/Packages/h/http-parser-2.9.4-6.el9.x86_64.rpm \
+    && dnf -y install https://download.rockylinux.org/pub/rocky/9/CRB/x86_64/os/Packages/h/http-parser-devel-2.9.4-6.el9.x86_64.rpm \
     && dnf -y install \
        autoconf \
        automake \
@@ -31,7 +34,6 @@ RUN set -ex \
        git \
        gtk2-devel \
        hdf5-devel \
-       http-parser-devel \
        hwloc-devel \
        json-c-devel \
        libcurl-devel \
@@ -82,11 +84,11 @@ RUN set -ex \
 # ============================================================================
 # Stage 2: Runtime image
 # ============================================================================
-FROM rockylinux/rockylinux:9
+FROM rockylinux/rockylinux:10
 
 LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docker-cluster" \
       org.opencontainers.image.title="slurm-docker-cluster" \
-      org.opencontainers.image.description="Slurm Docker cluster on Rocky Linux 9" \
+      org.opencontainers.image.description="Slurm Docker cluster on Rocky Linux 10" \
       maintainer="Giovanni Torres"
 
 ARG SLURM_VERSION
@@ -102,12 +104,12 @@ RUN set -ex \
 
 # Install runtime dependencies only
 RUN set -ex \
+    && dnf -y install https://download.rockylinux.org/pub/rocky/9/AppStream/x86_64/os/Packages/h/http-parser-2.9.4-6.el9.x86_64.rpm \
     && dnf -y install \
        bash-completion \
        bzip2 \
        gettext \
        hdf5 \
-       http-parser \
        hwloc \
        json-c \
        jq \
@@ -173,7 +175,7 @@ RUN set -x \
 # Fix /etc permissions and create munge key
 RUN set -x \
     && chmod 0755 /etc \
-    && /sbin/create-munge-key
+    && /sbin/mungekey --create
 
 # Create slurm dirs with correct ownership
 RUN set -x \
