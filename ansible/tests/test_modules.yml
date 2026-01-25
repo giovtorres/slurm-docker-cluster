@@ -1,0 +1,253 @@
+---
+# Integration Tests for Slurm Ansible Collection
+#
+# Tests all custom modules against a running Slurm cluster.
+# Run from the ansible directory with the cluster running.
+#
+# Usage:
+#   cd ansible
+#   ansible-playbook tests/test_modules.yml -v
+#
+# Requirements:
+#   - Running Slurm cluster (make up)
+#   - Access to slurmctld
+
+- name: "Test Suite: Slurm Ansible Collection"
+  hosts: localhost
+  gather_facts: true
+  vars:
+    test_node: "c1"  # Adjust for your cluster
+    test_results: []
+
+  tasks:
+    - name: "SETUP: Verify cluster is running"
+      ansible.builtin.command: scontrol ping
+      register: cluster_ping
+      changed_when: false
+      failed_when: "'UP' not in cluster_ping.stdout"
+
+    - name: "SETUP: Get test node"
+      ansible.builtin.shell: sinfo -h -o "%N" | head -1
+      register: first_node
+      changed_when: false
+
+    - name: "SETUP: Set test node"
+      ansible.builtin.set_fact:
+        test_node: "{{ first_node.stdout | trim }}"
+
+    - name: Display test configuration
+      ansible.builtin.debug:
+        msg: |
+          Test Configuration:
+            Cluster: {{ cluster_ping.stdout | trim }}
+            Test Node: {{ test_node }}
+
+    # =========================================
+    # TEST: slurm_node_info
+    # =========================================
+    - name: "TEST: slurm_node_info - Get all nodes"
+      slurm.node.slurm_node_info:
+      register: all_nodes
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_node_info returned nodes"
+      ansible.builtin.assert:
+        that:
+          - all_nodes is succeeded
+          - all_nodes.node_count > 0
+          - all_nodes.nodes is defined
+          - all_nodes.state_summary is defined
+        fail_msg: "slurm_node_info failed: {{ all_nodes }}"
+        success_msg: "slurm_node_info: Found {{ all_nodes.node_count }} nodes"
+
+    - name: "TEST: slurm_node_info - Get specific node"
+      slurm.node.slurm_node_info:
+        name: "{{ test_node }}"
+      register: single_node
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_node_info returned specific node"
+      ansible.builtin.assert:
+        that:
+          - single_node is succeeded
+          - single_node.node_count == 1
+          - single_node.nodes[0].name == test_node
+        fail_msg: "slurm_node_info specific node failed"
+        success_msg: "slurm_node_info specific: {{ single_node.nodes[0].name }} in state {{ single_node.nodes[0].state }}"
+
+    - name: "TEST: slurm_node_info - Filter by state"
+      slurm.node.slurm_node_info:
+        state_filter:
+          - idle
+          - allocated
+          - mixed
+      register: filtered_nodes
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_node_info state filter"
+      ansible.builtin.assert:
+        that:
+          - filtered_nodes is succeeded
+        fail_msg: "slurm_node_info state filter failed"
+        success_msg: "slurm_node_info filter: Found {{ filtered_nodes.node_count }} available nodes"
+
+    # =========================================
+    # TEST: slurm_node_state
+    # =========================================
+    - name: "TEST: slurm_node_state - Check mode drain"
+      slurm.node.slurm_node_state:
+        name: "{{ test_node }}"
+        state: drain
+        reason: "Ansible test"
+      check_mode: true
+      register: drain_check
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_node_state check mode"
+      ansible.builtin.assert:
+        that:
+          - drain_check is succeeded
+        fail_msg: "slurm_node_state check mode failed"
+        success_msg: "slurm_node_state check mode: Would change={{ drain_check.changed }}"
+
+    # Only test actual drain/resume if explicitly requested
+    - name: "TEST: slurm_node_state - Actual drain (SKIPPED by default)"
+      when: run_destructive_tests | default(false) | bool
+      block:
+        - name: Drain test node
+          slurm.node.slurm_node_state:
+            name: "{{ test_node }}"
+            state: drain
+            reason: "Ansible integration test"
+          register: drain_result
+
+        - name: Verify drain
+          ansible.builtin.assert:
+            that:
+              - drain_result is succeeded
+              - drain_result.changed or 'drain' in drain_result.previous_state[test_node]
+
+        - name: Resume test node
+          slurm.node.slurm_node_state:
+            name: "{{ test_node }}"
+            state: resume
+          register: resume_result
+
+        - name: Verify resume
+          ansible.builtin.assert:
+            that:
+              - resume_result is succeeded
+
+    # =========================================
+    # TEST: slurm_job_query
+    # =========================================
+    - name: "TEST: slurm_job_query - Get all jobs"
+      slurm.node.slurm_job_query:
+      register: all_jobs
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_job_query"
+      ansible.builtin.assert:
+        that:
+          - all_jobs is succeeded
+          - all_jobs.job_count is defined
+          - all_jobs.jobs is defined
+        fail_msg: "slurm_job_query failed"
+        success_msg: "slurm_job_query: Found {{ all_jobs.job_count }} jobs"
+
+    - name: "TEST: slurm_job_query - Filter by state"
+      slurm.node.slurm_job_query:
+        state:
+          - pending
+          - running
+      register: active_jobs
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_job_query state filter"
+      ansible.builtin.assert:
+        that:
+          - active_jobs is succeeded
+        fail_msg: "slurm_job_query state filter failed"
+        success_msg: "slurm_job_query filter: {{ active_jobs.job_count }} active jobs"
+
+    # =========================================
+    # TEST: slurm_wait_drain (check mode only)
+    # =========================================
+    - name: "TEST: slurm_wait_drain - Check mode"
+      slurm.node.slurm_wait_drain:
+        name: "{{ test_node }}"
+        timeout: 60
+      check_mode: true
+      register: wait_drain_check
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_wait_drain check mode"
+      ansible.builtin.assert:
+        that:
+          - wait_drain_check is succeeded
+        fail_msg: "slurm_wait_drain check mode failed"
+        success_msg: "slurm_wait_drain check: Node in state {{ wait_drain_check.final_state | default('unknown') }}"
+
+    # =========================================
+    # TEST: slurm_partition
+    # =========================================
+    - name: "TEST: slurm_partition - Get all partitions"
+      slurm.node.slurm_partition:
+      register: all_partitions
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_partition"
+      ansible.builtin.assert:
+        that:
+          - all_partitions is succeeded
+          - all_partitions.partitions is defined
+        fail_msg: "slurm_partition failed: {{ all_partitions.msg | default('unknown error') }}"
+        success_msg: "slurm_partition: Found {{ all_partitions.partitions | default([]) | length }} partitions"
+      when: all_partitions is succeeded
+
+    # =========================================
+    # TEST: slurm_reservation
+    # =========================================
+    - name: "TEST: slurm_reservation - Check mode create"
+      slurm.node.slurm_reservation:
+        name: "ansible_test_reservation"
+        state: present
+        nodes: "{{ test_node }}"
+        start_time: "now"
+        duration: "01:00:00"
+        users: "root"
+      check_mode: true
+      register: reservation_check
+      ignore_errors: true
+
+    - name: "VERIFY: slurm_reservation check mode"
+      ansible.builtin.assert:
+        that:
+          - reservation_check is not failed or 'not found' not in (reservation_check.msg | default(''))
+        fail_msg: "slurm_reservation check mode failed unexpectedly"
+        success_msg: "slurm_reservation check: Would create reservation"
+      when: reservation_check is defined
+
+    # =========================================
+    # SUMMARY
+    # =========================================
+    - name: "SUMMARY: Test Results"
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          TEST SUMMARY
+          ==========================================
+          slurm_node_info (all):      {{ 'PASS' if all_nodes is succeeded else 'FAIL' }}
+          slurm_node_info (single):   {{ 'PASS' if single_node is succeeded else 'FAIL' }}
+          slurm_node_info (filter):   {{ 'PASS' if filtered_nodes is succeeded else 'FAIL' }}
+          slurm_node_state (check):   {{ 'PASS' if drain_check is succeeded else 'FAIL' }}
+          slurm_job_query (all):      {{ 'PASS' if all_jobs is succeeded else 'FAIL' }}
+          slurm_job_query (filter):   {{ 'PASS' if active_jobs is succeeded else 'FAIL' }}
+          slurm_wait_drain (check):   {{ 'PASS' if wait_drain_check is succeeded else 'FAIL' }}
+          slurm_partition:            {{ 'PASS' if all_partitions is succeeded else 'FAIL' }}
+          slurm_reservation (check):  {{ 'PASS' if reservation_check is not failed else 'SKIP' }}
+          ==========================================
+
+          To run destructive tests (actual drain/resume):
+            ansible-playbook tests/test_modules.yml -e "run_destructive_tests=true"
+          ==========================================

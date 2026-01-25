@@ -30,7 +30,7 @@ TOTAL_WARNINGS=0
 TOTAL_ERRORS=0
 
 # Run each health check
-for script in slurm_health.sh system_health.sh network_health.sh; do
+for script in slurm_health.sh system_health.sh network_health.sh gpu_health.sh; do
     script_path="$SCRIPT_DIR/$script"
     check_name="${script%.sh}"
 

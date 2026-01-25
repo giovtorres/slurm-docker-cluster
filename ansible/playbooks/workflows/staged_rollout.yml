@@ -1,0 +1,254 @@
+---
+# Staged Rollout Workflow
+#
+# Implements a canary -> batch -> full rollout pattern for safe maintenance.
+#
+# Stages:
+#   1. Canary (1-2 nodes) - Validate on small set
+#   2. Early Adopters (10%) - Expand if canary succeeds
+#   3. Majority (50%) - Continue if early adopters succeed
+#   4. Remainder - Complete rollout
+#
+# Usage:
+#   ansible-playbook workflows/staged_rollout.yml \
+#     -e "target_partition=normal" \
+#     -e "maintenance_reason='OS Update v2.1'"
+
+- name: "Stage 0: Pre-flight and Planning"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    target_partition: "normal"
+    canary_count: 2
+    early_adopter_pct: 10
+    majority_pct: 50
+    stage_delay_minutes: 5
+    auto_proceed: false  # Set true to skip confirmations
+
+  tasks:
+    - name: Get all nodes in target partition
+      ansible.builtin.shell: |
+        sinfo -h -p {{ target_partition }} -o "%N" | tr ',' '\n' | sort
+      register: partition_nodes
+      changed_when: false
+
+    - name: Parse node list
+      ansible.builtin.set_fact:
+        all_nodes: "{{ partition_nodes.stdout_lines }}"
+        total_node_count: "{{ partition_nodes.stdout_lines | length }}"
+
+    - name: Calculate stage sizes
+      ansible.builtin.set_fact:
+        canary_nodes: "{{ all_nodes[:canary_count] }}"
+        early_adopter_count: "{{ ((total_node_count | int) * (early_adopter_pct | int) / 100) | int | max(1) }}"
+        majority_count: "{{ ((total_node_count | int) * (majority_pct | int) / 100) | int }}"
+
+    - name: Define rollout stages
+      ansible.builtin.set_fact:
+        stage_1_nodes: "{{ canary_nodes }}"
+        stage_2_nodes: "{{ all_nodes[canary_count:(canary_count + early_adopter_count | int)] }}"
+        stage_3_nodes: "{{ all_nodes[(canary_count + early_adopter_count | int):(canary_count + early_adopter_count | int + majority_count | int)] }}"
+        stage_4_nodes: "{{ all_nodes[(canary_count + early_adopter_count | int + majority_count | int):] }}"
+
+    - name: Display rollout plan
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          STAGED ROLLOUT PLAN
+          ==========================================
+          Target Partition: {{ target_partition }}
+          Total Nodes: {{ total_node_count }}
+          Reason: {{ maintenance_reason | default('Scheduled maintenance') }}
+
+          Stage 1 - Canary ({{ stage_1_nodes | length }} nodes):
+            {{ stage_1_nodes | join(', ') }}
+
+          Stage 2 - Early Adopters ({{ stage_2_nodes | length }} nodes):
+            {{ stage_2_nodes | join(', ') }}
+
+          Stage 3 - Majority ({{ stage_3_nodes | length }} nodes):
+            {{ stage_3_nodes | join(', ') }}
+
+          Stage 4 - Remainder ({{ stage_4_nodes | length }} nodes):
+            {{ stage_4_nodes | join(', ') }}
+
+          Auto-proceed: {{ auto_proceed }}
+          Stage delay: {{ stage_delay_minutes }} minutes
+          ==========================================
+
+    - name: Store rollout plan
+      ansible.builtin.set_fact:
+        rollout_plan:
+          stage_1: "{{ stage_1_nodes }}"
+          stage_2: "{{ stage_2_nodes }}"
+          stage_3: "{{ stage_3_nodes }}"
+          stage_4: "{{ stage_4_nodes }}"
+        cacheable: true
+
+
+- name: "Stage 1: Canary Deployment"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: "CANARY: Starting canary deployment"
+      ansible.builtin.debug:
+        msg: "Deploying to canary nodes: {{ rollout_plan.stage_1 | join(', ') }}"
+
+    - name: "CANARY: Execute maintenance on canary nodes"
+      ansible.builtin.include_tasks: ../roles/slurm_maintenance/tasks/main.yml
+      vars:
+        maintenance_action: full
+        target_hosts: "{{ rollout_plan.stage_1 }}"
+      loop: "{{ rollout_plan.stage_1 }}"
+      loop_control:
+        loop_var: current_node
+
+    - name: "CANARY: Wait for stabilization"
+      ansible.builtin.pause:
+        minutes: "{{ stage_delay_minutes }}"
+      when: not auto_proceed | bool
+
+    - name: "CANARY: Validate canary nodes"
+      ansible.builtin.shell: |
+        for node in {{ rollout_plan.stage_1 | join(' ') }}; do
+          state=$(sinfo -h -n $node -o "%T")
+          if [[ "$state" == *"down"* ]] || [[ "$state" == *"fail"* ]]; then
+            echo "FAILED: $node is in $state state"
+            exit 1
+          fi
+        done
+        echo "All canary nodes healthy"
+      register: canary_validation
+      changed_when: false
+
+    - name: "CANARY: Confirm proceed to Stage 2"
+      ansible.builtin.pause:
+        prompt: "Canary successful. Proceed to Early Adopters? (yes/no)"
+      register: proceed_stage_2
+      when: not auto_proceed | bool
+
+    - name: "CANARY: Check confirmation"
+      ansible.builtin.fail:
+        msg: "Rollout aborted by user after canary stage"
+      when:
+        - not auto_proceed | bool
+        - proceed_stage_2.user_input | default('yes') | lower != 'yes'
+
+
+- name: "Stage 2: Early Adopters"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: "EARLY ADOPTERS: Starting deployment"
+      ansible.builtin.debug:
+        msg: "Deploying to early adopter nodes: {{ rollout_plan.stage_2 | join(', ') }}"
+      when: rollout_plan.stage_2 | length > 0
+
+    - name: "EARLY ADOPTERS: Execute maintenance"
+      ansible.builtin.include_tasks: ../roles/slurm_maintenance/tasks/main.yml
+      vars:
+        maintenance_action: full
+        target_hosts: "{{ rollout_plan.stage_2 }}"
+      loop: "{{ rollout_plan.stage_2 }}"
+      loop_control:
+        loop_var: current_node
+      when: rollout_plan.stage_2 | length > 0
+
+    - name: "EARLY ADOPTERS: Validate"
+      ansible.builtin.shell: |
+        failed=0
+        for node in {{ rollout_plan.stage_2 | join(' ') }}; do
+          state=$(sinfo -h -n $node -o "%T")
+          if [[ "$state" == *"down"* ]] || [[ "$state" == *"fail"* ]]; then
+            echo "WARN: $node is in $state state"
+            ((failed++))
+          fi
+        done
+        total={{ rollout_plan.stage_2 | length }}
+        success=$((total - failed))
+        echo "Early Adopters: $success/$total successful"
+        # Allow up to 10% failure rate
+        threshold=$((total * 10 / 100))
+        if [[ $failed -gt $threshold ]]; then
+          exit 1
+        fi
+      register: early_adopter_validation
+      changed_when: false
+      when: rollout_plan.stage_2 | length > 0
+
+    - name: "EARLY ADOPTERS: Confirm proceed to Stage 3"
+      ansible.builtin.pause:
+        prompt: "Early adopters complete. Proceed to Majority? (yes/no)"
+      register: proceed_stage_3
+      when:
+        - not auto_proceed | bool
+        - rollout_plan.stage_3 | length > 0
+
+
+- name: "Stage 3: Majority Rollout"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: "MAJORITY: Starting deployment"
+      ansible.builtin.debug:
+        msg: "Deploying to majority nodes: {{ rollout_plan.stage_3 | length }} nodes"
+      when: rollout_plan.stage_3 | length > 0
+
+    - name: "MAJORITY: Execute maintenance (batched)"
+      ansible.builtin.include_tasks: ../roles/slurm_maintenance/tasks/main.yml
+      vars:
+        maintenance_action: full
+        target_hosts: "{{ rollout_plan.stage_3 }}"
+      loop: "{{ rollout_plan.stage_3 | batch(10) | list }}"
+      loop_control:
+        loop_var: batch_nodes
+      when: rollout_plan.stage_3 | length > 0
+
+
+- name: "Stage 4: Complete Rollout"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: "REMAINDER: Starting final deployment"
+      ansible.builtin.debug:
+        msg: "Deploying to remaining nodes: {{ rollout_plan.stage_4 | length }} nodes"
+      when: rollout_plan.stage_4 | length > 0
+
+    - name: "REMAINDER: Execute maintenance"
+      ansible.builtin.include_tasks: ../roles/slurm_maintenance/tasks/main.yml
+      vars:
+        maintenance_action: full
+        target_hosts: "{{ rollout_plan.stage_4 }}"
+      loop: "{{ rollout_plan.stage_4 | batch(10) | list }}"
+      loop_control:
+        loop_var: batch_nodes
+      when: rollout_plan.stage_4 | length > 0
+
+
+- name: "Final: Rollout Summary"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Get final cluster state
+      ansible.builtin.shell: |
+        echo "=== Cluster State ==="
+        sinfo -o "%P %a %D %T"
+        echo ""
+        echo "=== Node Summary ==="
+        sinfo -o "%T" | sort | uniq -c
+      register: final_state
+      changed_when: false
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          STAGED ROLLOUT COMPLETE
+          ==========================================
+          {{ final_state.stdout }}
+          ==========================================

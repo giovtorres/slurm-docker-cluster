@@ -1,0 +1,324 @@
+---
+# Approval Workflow for Maintenance Operations
+#
+# Implements a request -> review -> approve -> execute pattern.
+# Designed for integration with AWX workflow templates.
+#
+# Workflow Steps:
+#   1. Request: Validate and record maintenance request
+#   2. Review: Generate impact assessment
+#   3. Approve: Wait for approval (manual gate or API)
+#   4. Execute: Run maintenance with notifications
+#   5. Report: Generate completion report
+#
+# Usage:
+#   # Submit request
+#   ansible-playbook workflows/approval_workflow.yml \
+#     -e "workflow_stage=request" \
+#     -e "target_nodes=partition_normal" \
+#     -e "requestor=ops-team"
+#
+#   # After approval
+#   ansible-playbook workflows/approval_workflow.yml \
+#     -e "workflow_stage=execute" \
+#     -e "request_id=REQ-20240115-001"
+
+- name: "Workflow: Maintenance Approval Process"
+  hosts: localhost
+  gather_facts: true
+
+  vars:
+    workflow_stage: "request"  # request, review, approve, execute, report
+    request_id: "REQ-{{ ansible_date_time.date | replace('-','') }}-{{ 999 | random }}"
+    request_dir: "/var/lib/awx/maintenance_requests"
+    approval_timeout_hours: 24
+    notify_channels:
+      - slack
+      - email
+
+  tasks:
+    # =========================================
+    # STAGE: REQUEST
+    # =========================================
+    - name: "REQUEST: Create maintenance request"
+      when: workflow_stage == "request"
+      block:
+        - name: Ensure request directory exists
+          ansible.builtin.file:
+            path: "{{ request_dir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Gather target node information
+          ansible.builtin.shell: |
+            sinfo -h -N -o "%N|%T|%P|%C|%m" {{ '-n ' + target_nodes if target_nodes is defined else '' }}
+          register: node_info
+          changed_when: false
+
+        - name: Count affected resources
+          ansible.builtin.set_fact:
+            affected_nodes: "{{ node_info.stdout_lines | length }}"
+            affected_jobs: "{{ lookup('pipe', 'squeue -h -w ' + (target_nodes | default('')) + ' 2>/dev/null | wc -l') | default('0') }}"
+
+        - name: Create request record
+          ansible.builtin.copy:
+            content: |
+              ---
+              request_id: "{{ request_id }}"
+              status: pending_review
+              created: "{{ ansible_date_time.iso8601 }}"
+              requestor: "{{ requestor | default('unknown') }}"
+              target_nodes: "{{ target_nodes | default('all') }}"
+              maintenance_reason: "{{ maintenance_reason | default('Scheduled maintenance') }}"
+              affected_nodes: {{ affected_nodes }}
+              affected_jobs: {{ affected_jobs }}
+              batch_size: {{ batch_size | default(5) }}
+              drain_timeout: {{ drain_timeout | default(600) }}
+              approval_required: true
+              approved_by: null
+              approved_at: null
+              execution_started: null
+              execution_completed: null
+            dest: "{{ request_dir }}/{{ request_id }}.yml"
+            mode: '0644'
+
+        - name: Send request notification
+          ansible.builtin.include_role:
+            name: notifications
+          vars:
+            notification_type: start
+            notification_title: "Maintenance Request Submitted"
+            notification_message: |
+              Request ID: {{ request_id }}
+              Requestor: {{ requestor | default('unknown') }}
+              Target: {{ target_nodes | default('all') }}
+              Affected Nodes: {{ affected_nodes }}
+              Affected Jobs: {{ affected_jobs }}
+              Reason: {{ maintenance_reason | default('Scheduled maintenance') }}
+
+              Awaiting approval.
+          when: notify_channels | length > 0
+
+        - name: Display request summary
+          ansible.builtin.debug:
+            msg: |
+              ==========================================
+              MAINTENANCE REQUEST CREATED
+              ==========================================
+              Request ID: {{ request_id }}
+              Status: Pending Review
+
+              To approve, run:
+                ansible-playbook approval_workflow.yml \
+                  -e "workflow_stage=approve" \
+                  -e "request_id={{ request_id }}" \
+                  -e "approver=YOUR_NAME"
+
+              Or via AWX API.
+              ==========================================
+
+
+    # =========================================
+    # STAGE: REVIEW
+    # =========================================
+    - name: "REVIEW: Generate impact assessment"
+      when: workflow_stage == "review"
+      block:
+        - name: Load request
+          ansible.builtin.include_vars:
+            file: "{{ request_dir }}/{{ request_id }}.yml"
+            name: maint_request
+
+        - name: Generate impact report
+          ansible.builtin.shell: |
+            echo "=== IMPACT ASSESSMENT ==="
+            echo "Request: {{ request_id }}"
+            echo ""
+            echo "=== Affected Nodes ==="
+            sinfo -h -N -o "%N %T %P %C/%c %m" {{ '-n ' + maint_request.target_nodes if maint_request.target_nodes != 'all' else '' }}
+            echo ""
+            echo "=== Running Jobs That Will Be Affected ==="
+            squeue -h {{ '-w ' + maint_request.target_nodes if maint_request.target_nodes != 'all' else '' }} -o "%.8i %.9P %.20j %.8u %.2t %.10M %.6D %R" | head -20
+            echo ""
+            echo "=== Cluster Capacity After Drain ==="
+            total=$(sinfo -h -o "%D" | awk '{sum+=$1} END {print sum}')
+            target={{ maint_request.affected_nodes | default(0) }}
+            remaining=$((total - target))
+            pct=$((remaining * 100 / total))
+            echo "Current nodes: $total"
+            echo "Nodes to drain: $target"
+            echo "Remaining capacity: $remaining ($pct%)"
+          register: impact_report
+          changed_when: false
+
+        - name: Display impact report
+          ansible.builtin.debug:
+            msg: "{{ impact_report.stdout }}"
+
+
+    # =========================================
+    # STAGE: APPROVE
+    # =========================================
+    - name: "APPROVE: Record approval"
+      when: workflow_stage == "approve"
+      block:
+        - name: Load request
+          ansible.builtin.slurp:
+            src: "{{ request_dir }}/{{ request_id }}.yml"
+          register: request_content
+
+        - name: Parse request
+          ansible.builtin.set_fact:
+            maint_request: "{{ request_content.content | b64decode | from_yaml }}"
+
+        - name: Validate request is pending
+          ansible.builtin.assert:
+            that:
+              - maint_request.status == 'pending_review'
+            fail_msg: "Request {{ request_id }} is not pending review (status: {{ maint_request.status }})"
+
+        - name: Update request with approval
+          ansible.builtin.copy:
+            content: |
+              {{ maint_request | combine({
+                'status': 'approved',
+                'approved_by': approver | default('unknown'),
+                'approved_at': ansible_date_time.iso8601
+              }) | to_nice_yaml }}
+            dest: "{{ request_dir }}/{{ request_id }}.yml"
+            mode: '0644'
+
+        - name: Send approval notification
+          ansible.builtin.include_role:
+            name: notifications
+          vars:
+            notification_type: success
+            notification_title: "Maintenance Request Approved"
+            notification_message: |
+              Request ID: {{ request_id }}
+              Approved by: {{ approver | default('unknown') }}
+              Target: {{ maint_request.target_nodes }}
+
+              Ready for execution.
+          when: notify_channels | length > 0
+
+        - name: Display approval confirmation
+          ansible.builtin.debug:
+            msg: |
+              ==========================================
+              REQUEST APPROVED
+              ==========================================
+              Request ID: {{ request_id }}
+              Approved by: {{ approver | default('unknown') }}
+
+              To execute, run:
+                ansible-playbook approval_workflow.yml \
+                  -e "workflow_stage=execute" \
+                  -e "request_id={{ request_id }}"
+              ==========================================
+
+
+    # =========================================
+    # STAGE: EXECUTE
+    # =========================================
+    - name: "EXECUTE: Run approved maintenance"
+      when: workflow_stage == "execute"
+      block:
+        - name: Load request
+          ansible.builtin.slurp:
+            src: "{{ request_dir }}/{{ request_id }}.yml"
+          register: request_content
+
+        - name: Parse request
+          ansible.builtin.set_fact:
+            maint_request: "{{ request_content.content | b64decode | from_yaml }}"
+
+        - name: Validate approval
+          ansible.builtin.assert:
+            that:
+              - maint_request.status == 'approved'
+            fail_msg: "Request {{ request_id }} is not approved (status: {{ maint_request.status }})"
+
+        - name: Mark execution started
+          ansible.builtin.copy:
+            content: |
+              {{ maint_request | combine({
+                'status': 'executing',
+                'execution_started': ansible_date_time.iso8601
+              }) | to_nice_yaml }}
+            dest: "{{ request_dir }}/{{ request_id }}.yml"
+            mode: '0644'
+
+        - name: Send execution notification
+          ansible.builtin.include_role:
+            name: notifications
+          vars:
+            notification_type: start
+            notification_title: "Maintenance Execution Started"
+            notification_message: |
+              Request ID: {{ request_id }}
+              Target: {{ maint_request.target_nodes }}
+              Batch Size: {{ maint_request.batch_size }}
+
+        - name: Execute rolling maintenance
+          ansible.builtin.include_tasks: ../rolling_maintenance.yml
+          vars:
+            target_nodes: "{{ maint_request.target_nodes }}"
+            batch_size: "{{ maint_request.batch_size }}"
+            maintenance_reason: "{{ maint_request.maintenance_reason }} [{{ request_id }}]"
+            drain_timeout: "{{ maint_request.drain_timeout }}"
+
+        - name: Mark execution completed
+          ansible.builtin.copy:
+            content: |
+              {{ maint_request | combine({
+                'status': 'completed',
+                'execution_completed': ansible_date_time.iso8601
+              }) | to_nice_yaml }}
+            dest: "{{ request_dir }}/{{ request_id }}.yml"
+            mode: '0644'
+
+        - name: Send completion notification
+          ansible.builtin.include_role:
+            name: notifications
+          vars:
+            notification_type: success
+            notification_title: "Maintenance Completed"
+            notification_message: |
+              Request ID: {{ request_id }}
+              Status: Completed
+              Duration: {{ (ansible_date_time.epoch | int) - (maint_request.execution_started | to_datetime).timestamp() | int }} seconds
+
+
+    # =========================================
+    # STAGE: REPORT
+    # =========================================
+    - name: "REPORT: Generate completion report"
+      when: workflow_stage == "report"
+      block:
+        - name: Load request
+          ansible.builtin.include_vars:
+            file: "{{ request_dir }}/{{ request_id }}.yml"
+            name: maint_request
+
+        - name: Generate report
+          ansible.builtin.debug:
+            msg: |
+              ==========================================
+              MAINTENANCE COMPLETION REPORT
+              ==========================================
+              Request ID: {{ maint_request.request_id }}
+              Status: {{ maint_request.status }}
+
+              Timeline:
+                Created: {{ maint_request.created }}
+                Approved: {{ maint_request.approved_at | default('N/A') }}
+                Started: {{ maint_request.execution_started | default('N/A') }}
+                Completed: {{ maint_request.execution_completed | default('N/A') }}
+
+              Details:
+                Requestor: {{ maint_request.requestor }}
+                Approver: {{ maint_request.approved_by | default('N/A') }}
+                Target: {{ maint_request.target_nodes }}
+                Reason: {{ maint_request.maintenance_reason }}
+              ==========================================
