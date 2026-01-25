@@ -1,0 +1,62 @@
+---
+# Notifications Role - Main Tasks
+#
+# This role provides notification capabilities for maintenance playbooks.
+# Include it in your playbook and call the appropriate task file based on
+# the type of notification needed.
+#
+# Usage in playbooks:
+#   - include_role:
+#       name: notifications
+#       tasks_from: start
+#     vars:
+#       maintenance_id: "{{ maintenance_id }}"
+#       target_nodes: "{{ target_nodes }}"
+#
+#   - include_role:
+#       name: notifications
+#       tasks_from: success
+#
+#   - include_role:
+#       name: notifications
+#       tasks_from: failure
+#     vars:
+#       error_message: "{{ ansible_failed_result.msg }}"
+
+- name: Validate notification configuration
+  ansible.builtin.assert:
+    that:
+      - notify_slack or notify_teams or notify_email or not (notify_on_start or notify_on_success or notify_on_failure)
+    fail_msg: "At least one notification channel must be configured when notifications are enabled"
+    success_msg: "Notification configuration validated"
+  when: notify_on_start or notify_on_success or notify_on_failure
+
+- name: Check Slack webhook configuration
+  ansible.builtin.assert:
+    that:
+      - slack_webhook_url | length > 0
+    fail_msg: "slack_webhook_url must be set when notify_slack is true"
+  when: notify_slack
+
+- name: Check Teams webhook configuration
+  ansible.builtin.assert:
+    that:
+      - teams_webhook_url | length > 0
+    fail_msg: "teams_webhook_url must be set when notify_teams is true"
+  when: notify_teams
+
+- name: Check email configuration
+  ansible.builtin.assert:
+    that:
+      - smtp_host | length > 0
+      - email_to | length > 0
+    fail_msg: "smtp_host and email_to must be set when notify_email is true"
+  when: notify_email
+
+- name: Initialize notification state
+  ansible.builtin.set_fact:
+    notification_state:
+      initialized: true
+      start_time: "{{ ansible_date_time.iso8601 }}"
+      last_notification: ""
+      notifications_sent: 0

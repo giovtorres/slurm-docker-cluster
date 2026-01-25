@@ -1,20 +1,58 @@
 ---
-# AWX Docker Compose Setup
+# AWX Docker Compose Setup - Production Hardened
 #
 # Provides:
 # - AWX Web UI for scheduling and visibility
-# - PostgreSQL database
+# - PostgreSQL database with backup capabilities
 # - Redis for caching/messaging
 # - AWX task workers
+# - Nginx reverse proxy with HTTPS/TLS termination
 #
 # Usage:
 #   docker compose -f docker-compose.awx.yml up -d
 #
 # Access:
-#   Web UI: http://localhost:8052
+#   Web UI: https://localhost (with TLS)
+#   HTTP Redirect: http://localhost -> https://localhost
 #   Default credentials: admin / password (change immediately!)
 
 services:
+  # Nginx Reverse Proxy with TLS Termination
+  awx-nginx:
+    image: nginx:1.25-alpine
+    container_name: awx-nginx
+    restart: unless-stopped
+    ports:
+      - "${AWX_HTTPS_PORT:-443}:443"
+      - "${AWX_HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    depends_on:
+      awx-web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - awx-net
+
   # PostgreSQL Database
   awx-postgres:
     image: postgres:15-alpine
@@ -24,8 +62,46 @@ services:
       POSTGRES_USER: awx
       POSTGRES_PASSWORD: ${AWX_DB_PASSWORD:-awxpass}
       POSTGRES_DB: awx
+      # Performance tuning
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - awx_postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+      - ./scripts/backup-postgres.sh:/usr/local/bin/backup-postgres.sh:ro
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c maintenance_work_mem=128MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=16MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c max_worker_processes=4
+      -c max_parallel_workers_per_gather=2
+      -c max_parallel_workers=4
+      -c max_parallel_maintenance_workers=2
+      -c log_min_duration_statement=1000
+      -c log_checkpoints=on
+      -c log_connections=on
+      -c log_disconnections=on
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U awx -d awx"]
       interval: 10s
@@ -40,9 +116,32 @@ services:
     image: redis:7-alpine
     container_name: awx-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --tcp-backlog 511
+      --save 900 1
+      --save 300 10
+      --save 60 10000
     volumes:
       - awx_redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -71,14 +170,31 @@ services:
       SECRET_KEY: ${AWX_SECRET_KEY:-awxsecret}
       REDIS_HOST: awx-redis
       REDIS_PORT: 6379
-    ports:
-      - "${AWX_WEB_PORT:-8052}:8052"
+      # Trust proxy headers from nginx
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://localhost,https://awx.example.com}
+    # Internal port only - nginx handles external access
+    expose:
+      - "8052"
     volumes:
       - ./config/settings.py:/etc/tower/settings.py:ro
       - ./config/credentials.py:/etc/tower/conf.d/credentials.py:ro
+      - ./config/ldap.py:/etc/tower/conf.d/ldap.py:ro
       - ./projects:/var/lib/awx/projects:rw
       - awx_job_output:/var/lib/awx/job_status
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
     depends_on:
       awx-postgres:
         condition: service_healthy
@@ -116,12 +232,26 @@ services:
     volumes:
       - ./config/settings.py:/etc/tower/settings.py:ro
       - ./config/credentials.py:/etc/tower/conf.d/credentials.py:ro
+      - ./config/ldap.py:/etc/tower/conf.d/ldap.py:ro
       - ./projects:/var/lib/awx/projects:rw
       - awx_job_output:/var/lib/awx/job_status
       # Mount SSH keys for node access
       - ./credentials/ssh:/root/.ssh:ro
       # Mount the ansible directory for local project access
       - ../ansible:/var/lib/awx/projects/slurm-maintenance:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
     depends_on:
       awx-web:
         condition: service_healthy
@@ -134,8 +264,30 @@ services:
     image: prom/pushgateway:v1.6.2
     container_name: awx-pushgateway
     restart: unless-stopped
+    command:
+      - '--web.listen-address=:9091'
+      - '--push.disable-consistency-check'
+      - '--persistence.file=/data/pushgateway.dat'
+      - '--persistence.interval=5m'
+    expose:
+      - "9091"
     ports:
       - "${PUSHGATEWAY_PORT:-9091}:9091"
+    volumes:
+      - awx_pushgateway_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/-/healthy"]
       interval: 30s
@@ -156,8 +308,61 @@ services:
     volumes:
       - ./config/receptor.conf:/etc/receptor/receptor.conf:ro
       - awx_receptor_socket:/var/run/receptor
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
     depends_on:
       awx-web:
+        condition: service_healthy
+    networks:
+      - awx-net
+
+  # PostgreSQL Backup Cron Job
+  awx-backup:
+    image: postgres:15-alpine
+    container_name: awx-backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: awx-postgres
+      POSTGRES_USER: awx
+      POSTGRES_PASSWORD: ${AWX_DB_PASSWORD:-awxpass}
+      POSTGRES_DB: awx
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      PGPASSWORD: ${AWX_DB_PASSWORD:-awxpass}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup-cron.sh:/usr/local/bin/backup-cron.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "0 2 * * * /usr/local/bin/backup-cron.sh >> /var/log/backup.log 2>&1" > /var/spool/cron/crontabs/root
+        chmod 0600 /var/spool/cron/crontabs/root
+        crond -f -l 2
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      awx-postgres:
         condition: service_healthy
     networks:
       - awx-net
@@ -171,6 +376,8 @@ volumes:
     name: awx_job_output
   awx_receptor_socket:
     name: awx_receptor_socket
+  awx_pushgateway_data:
+    name: awx_pushgateway_data
 
 networks:
   awx-net:

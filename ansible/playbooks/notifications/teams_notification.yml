@@ -1,0 +1,137 @@
+---
+# Microsoft Teams Notification Playbook
+#
+# Sends notifications to Microsoft Teams via incoming webhook.
+# Uses Adaptive Cards format for rich formatting.
+#
+# Required variables:
+#   - teams_webhook_url: Teams incoming webhook URL
+#   - notification_message: Message to send
+#
+# Optional variables:
+#   - notification_status: success, warning, failure, info, critical
+#   - notification_title: Card title
+#   - notification_summary: Card summary (for notifications)
+#   - notification_facts: Additional facts as list of {name, value}
+#   - maintenance_id: Maintenance operation ID
+#   - target_nodes: Target node group
+#   - action_url: URL for action button
+#   - action_text: Text for action button
+#
+# Usage:
+#   ansible-playbook notifications/teams_notification.yml \
+#     -e "teams_webhook_url=https://outlook.office.com/webhook/XXX" \
+#     -e "notification_message='Maintenance completed'" \
+#     -e "notification_status=success"
+
+- name: Send Microsoft Teams Notification
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  vars:
+    notification_status: "info"
+    notification_title: "Slurm Cluster Notification"
+    notification_summary: "Slurm maintenance notification"
+    notification_facts: []
+
+    # Theme colors for different statuses
+    status_colors:
+      success: "00FF00"
+      warning: "FFA500"
+      failure: "FF0000"
+      info: "0078D7"
+      critical: "8B0000"
+
+    # Status icons
+    status_icons:
+      success: "&#x2705;"
+      warning: "&#x26A0;&#xFE0F;"
+      failure: "&#x274C;"
+      info: "&#x2139;&#xFE0F;"
+      critical: "&#x1F6A8;"
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - teams_webhook_url is defined
+          - teams_webhook_url | length > 0
+          - notification_message is defined
+        fail_msg: "teams_webhook_url and notification_message are required"
+
+    - name: Set theme color based on status
+      ansible.builtin.set_fact:
+        theme_color: "{{ status_colors[notification_status] | default('0078D7') }}"
+        status_icon: "{{ status_icons[notification_status] | default('') }}"
+
+    - name: Build base facts list
+      ansible.builtin.set_fact:
+        base_facts:
+          - name: "Status"
+            value: "{{ status_icon }} {{ notification_status | upper }}"
+          - name: "Cluster"
+            value: "{{ cluster_name | default('Slurm Cluster') }}"
+          - name: "Timestamp"
+            value: "{{ ansible_date_time.iso8601 }}"
+
+    - name: Add maintenance ID to facts if provided
+      ansible.builtin.set_fact:
+        base_facts: "{{ base_facts + [{'name': 'Maintenance ID', 'value': maintenance_id}] }}"
+      when: maintenance_id is defined
+
+    - name: Add target nodes to facts if provided
+      ansible.builtin.set_fact:
+        base_facts: "{{ base_facts + [{'name': 'Target Nodes', 'value': target_nodes}] }}"
+      when: target_nodes is defined
+
+    - name: Combine all facts
+      ansible.builtin.set_fact:
+        all_facts: "{{ base_facts + (notification_facts | default([])) }}"
+
+    - name: Build Teams Adaptive Card payload
+      ansible.builtin.set_fact:
+        teams_payload:
+          "@type": "MessageCard"
+          "@context": "http://schema.org/extensions"
+          themeColor: "{{ theme_color }}"
+          summary: "{{ notification_summary }}"
+          sections:
+            - activityTitle: "{{ notification_title }}"
+              activitySubtitle: "{{ ansible_date_time.date }} {{ ansible_date_time.time }}"
+              activityImage: "https://raw.githubusercontent.com/SchedMD/slurm/master/doc/html/slurm_logo.png"
+              facts: "{{ all_facts }}"
+              text: "{{ notification_message }}"
+              markdown: true
+
+    - name: Add action button if URL provided
+      ansible.builtin.set_fact:
+        teams_payload: >-
+          {{
+            teams_payload | combine({
+              'potentialAction': [{
+                '@type': 'OpenUri',
+                'name': action_text | default('View Details'),
+                'targets': [{'os': 'default', 'uri': action_url}]
+              }]
+            })
+          }}
+      when: action_url is defined
+
+    - name: Send Teams notification
+      ansible.builtin.uri:
+        url: "{{ teams_webhook_url }}"
+        method: POST
+        body_format: json
+        body: "{{ teams_payload }}"
+        status_code: [200, 202]
+        timeout: 30
+      register: teams_result
+      retries: 3
+      delay: 5
+      until: teams_result.status in [200, 202]
+
+    - name: Log notification sent
+      ansible.builtin.debug:
+        msg: "Teams notification sent successfully"
+      when: teams_result.status in [200, 202]

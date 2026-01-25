@@ -1,0 +1,114 @@
+{
+  "name": "Weekly Security Patching",
+  "description": "Automated weekly security patching for Slurm compute nodes. Runs every Sunday at 2:00 AM during low-usage period.",
+  "job_type": "run",
+  "playbook": "playbooks/rolling_maintenance.yml",
+  "inventory": "Slurm Cluster",
+  "project": "Slurm Maintenance",
+  "ask_variables_on_launch": false,
+  "ask_limit_on_launch": true,
+  "ask_credential_on_launch": false,
+  "survey_enabled": true,
+  "become_enabled": true,
+  "verbosity": 1,
+  "timeout": 14400,
+  "extra_vars": {
+    "maintenance_reason": "Weekly security patching",
+    "security_only": true,
+    "allow_reboot": true,
+    "notify_slack": true,
+    "notify_on_start": true,
+    "notify_on_success": true,
+    "notify_on_failure": true
+  },
+  "survey_spec": {
+    "name": "Weekly Security Patching Parameters",
+    "description": "Configure security patching options",
+    "spec": [
+      {
+        "question_name": "Target Node Group",
+        "question_description": "Which nodes to patch (inventory group or pattern). Use 'all' for entire cluster or partition name.",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "target_nodes",
+        "choices": [
+          "partition_normal",
+          "partition_gpu",
+          "partition_highmem",
+          "slurm_idle",
+          "all"
+        ],
+        "default": "slurm_idle"
+      },
+      {
+        "question_name": "Batch Size",
+        "question_description": "Number of nodes to patch concurrently. Lower values = safer but slower.",
+        "required": true,
+        "type": "integer",
+        "variable": "batch_size",
+        "min": 1,
+        "max": 25,
+        "default": 5
+      },
+      {
+        "question_name": "Drain Timeout (seconds)",
+        "question_description": "Maximum time to wait for running jobs to complete before patching.",
+        "required": true,
+        "type": "integer",
+        "variable": "drain_timeout",
+        "min": 300,
+        "max": 7200,
+        "default": 1800
+      },
+      {
+        "question_name": "Allow Reboot",
+        "question_description": "Allow automatic reboot if kernel is updated?",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "allow_reboot",
+        "choices": [
+          "true",
+          "false"
+        ],
+        "default": "true"
+      },
+      {
+        "question_name": "Exclude Packages",
+        "question_description": "Comma-separated list of packages to exclude from updates (leave empty for none)",
+        "required": false,
+        "type": "text",
+        "variable": "exclude_packages_str",
+        "default": ""
+      },
+      {
+        "question_name": "Slack Webhook URL",
+        "question_description": "Slack webhook URL for notifications (leave empty to disable)",
+        "required": false,
+        "type": "password",
+        "variable": "slack_webhook_url",
+        "default": ""
+      }
+    ]
+  },
+  "schedule": {
+    "name": "Weekly Security Patching - Sunday 2AM",
+    "description": "Run security patching every Sunday at 2:00 AM",
+    "enabled": true,
+    "rrule": "DTSTART:20240101T020000Z RRULE:FREQ=WEEKLY;BYDAY=SU",
+    "extra_data": {
+      "target_nodes": "slurm_idle",
+      "batch_size": 5,
+      "drain_timeout": 1800,
+      "allow_reboot": true
+    }
+  },
+  "labels": [
+    "security",
+    "patching",
+    "scheduled",
+    "weekly"
+  ],
+  "credentials": [
+    "Slurm Nodes SSH"
+  ]
+}

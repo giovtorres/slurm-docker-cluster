@@ -1,0 +1,131 @@
+---
+# Send notification on maintenance success
+#
+# Variables used:
+#   - maintenance_id: Unique maintenance operation ID
+#   - nodes_completed: Number or list of nodes completed
+#   - nodes_failed: Number or list of nodes failed
+#   - maintenance_duration: Total duration of maintenance
+
+- name: Calculate summary statistics
+  ansible.builtin.set_fact:
+    completed_count: "{{ nodes_completed | length if nodes_completed is iterable and nodes_completed is not string else nodes_completed | default(0) }}"
+    failed_count: "{{ nodes_failed | length if nodes_failed is iterable and nodes_failed is not string else nodes_failed | default(0) }}"
+
+- name: Build success notification message
+  ansible.builtin.set_fact:
+    notification_message: |
+      Maintenance completed successfully.
+
+      Nodes Completed: {{ completed_count }}
+      Nodes Failed: {{ failed_count }}
+      Duration: {{ maintenance_duration | default('N/A') }}
+    notification_status: "success"
+    notification_title: "Maintenance Completed"
+
+- name: Add node details if enabled and available
+  ansible.builtin.set_fact:
+    notification_message: |
+      {{ notification_message }}
+
+      Completed Nodes:
+      {{ (nodes_completed[:max_nodes_in_notification] | join(', ')) + ('...' if nodes_completed | length > max_nodes_in_notification else '') }}
+  when:
+    - include_node_details
+    - nodes_completed is defined
+    - nodes_completed is iterable
+    - nodes_completed is not string
+    - nodes_completed | length > 0
+
+- name: Send Slack success notification
+  ansible.builtin.uri:
+    url: "{{ slack_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ slack_username }}"
+      icon_emoji: ":white_check_mark:"
+      channel: "{{ slack_channel | default(omit) }}"
+      attachments:
+        - color: "good"
+          title: "{{ notification_title }} - {{ cluster_name }}"
+          text: "{{ notification_message }}"
+          fields:
+            - title: "Environment"
+              value: "{{ cluster_environment }}"
+              short: true
+            - title: "Completed"
+              value: "{{ completed_count }} nodes"
+              short: true
+            - title: "Failed"
+              value: "{{ failed_count }} nodes"
+              short: true
+            - title: "Duration"
+              value: "{{ maintenance_duration | default('N/A') }}"
+              short: true
+          footer: "Slurm Rolling Maintenance"
+          ts: "{{ ansible_date_time.epoch }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_slack and notify_on_success
+  register: slack_success_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: slack_success_result.status == 200
+  ignore_errors: true
+
+- name: Send Teams success notification
+  ansible.builtin.uri:
+    url: "{{ teams_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      "@type": "MessageCard"
+      "@context": "http://schema.org/extensions"
+      themeColor: "00FF00"
+      summary: "Maintenance Completed Successfully"
+      sections:
+        - activityTitle: "{{ notification_title }}"
+          activitySubtitle: "{{ cluster_name }} - {{ cluster_environment }}"
+          facts:
+            - name: "Status"
+              value: "SUCCESS"
+            - name: "Nodes Completed"
+              value: "{{ completed_count }}"
+            - name: "Nodes Failed"
+              value: "{{ failed_count }}"
+            - name: "Duration"
+              value: "{{ maintenance_duration | default('N/A') }}"
+            - name: "Completed At"
+              value: "{{ ansible_date_time.iso8601 }}"
+          text: "{{ notification_message }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_teams and notify_on_success
+  register: teams_success_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: teams_success_result.status in [200, 202]
+  ignore_errors: true
+
+- name: Send email success notification
+  community.general.mail:
+    host: "{{ smtp_host }}"
+    port: "{{ smtp_port }}"
+    username: "{{ smtp_username | default(omit) }}"
+    password: "{{ smtp_password | default(omit) }}"
+    secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+    from: "{{ email_from }}"
+    to: "{{ email_to | join(',') if email_to is iterable and email_to is not string else email_to }}"
+    cc: "{{ email_cc | join(',') if email_cc | length > 0 else omit }}"
+    subject: "[SUCCESS] {{ notification_title }} - {{ cluster_name }}"
+    subtype: "{{ email_format }}"
+    body: "{{ notification_message }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_email and notify_on_success
+  register: email_success_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  ignore_errors: true
+
+- name: Update notification state
+  ansible.builtin.set_fact:
+    notification_state: "{{ notification_state | combine({'last_notification': 'success', 'notifications_sent': notification_state.notifications_sent | int + 1}) }}"

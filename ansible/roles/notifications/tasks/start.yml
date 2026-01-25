@@ -1,0 +1,113 @@
+---
+# Send notification at maintenance start
+#
+# Variables used:
+#   - maintenance_id: Unique maintenance operation ID
+#   - target_nodes: Target node group or pattern
+#   - batch_size: Number of nodes per batch
+#   - maintenance_reason: Reason for maintenance
+
+- name: Build start notification message
+  ansible.builtin.set_fact:
+    notification_message: |
+      Maintenance operation starting.
+
+      Target: {{ target_nodes | default('Not specified') }}
+      Batch Size: {{ batch_size | default('Default') }}
+      Reason: {{ maintenance_reason | default('Scheduled maintenance') }}
+    notification_status: "info"
+    notification_title: "Maintenance Started"
+
+- name: Add maintenance ID to message if available
+  ansible.builtin.set_fact:
+    notification_message: |
+      {{ notification_message }}
+      Maintenance ID: {{ maintenance_id }}
+  when: maintenance_id is defined
+
+- name: Send Slack start notification
+  ansible.builtin.uri:
+    url: "{{ slack_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ slack_username }}"
+      icon_emoji: "{{ slack_icon_emoji }}"
+      channel: "{{ slack_channel | default(omit) }}"
+      attachments:
+        - color: "#17a2b8"
+          title: "{{ notification_title }} - {{ cluster_name }}"
+          text: "{{ notification_message }}"
+          fields:
+            - title: "Environment"
+              value: "{{ cluster_environment }}"
+              short: true
+            - title: "Started At"
+              value: "{{ ansible_date_time.iso8601 }}"
+              short: true
+          footer: "Slurm Rolling Maintenance"
+          ts: "{{ ansible_date_time.epoch }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_slack and notify_on_start
+  register: slack_start_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: slack_start_result.status == 200
+  ignore_errors: true
+
+- name: Send Teams start notification
+  ansible.builtin.uri:
+    url: "{{ teams_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      "@type": "MessageCard"
+      "@context": "http://schema.org/extensions"
+      themeColor: "0078D7"
+      summary: "Maintenance Started"
+      sections:
+        - activityTitle: "{{ notification_title }}"
+          activitySubtitle: "{{ cluster_name }} - {{ cluster_environment }}"
+          facts:
+            - name: "Status"
+              value: "Started"
+            - name: "Target Nodes"
+              value: "{{ target_nodes | default('Not specified') }}"
+            - name: "Batch Size"
+              value: "{{ batch_size | default('Default') }}"
+            - name: "Reason"
+              value: "{{ maintenance_reason | default('Scheduled maintenance') }}"
+            - name: "Started At"
+              value: "{{ ansible_date_time.iso8601 }}"
+          text: "{{ notification_message }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_teams and notify_on_start
+  register: teams_start_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: teams_start_result.status in [200, 202]
+  ignore_errors: true
+
+- name: Send email start notification
+  community.general.mail:
+    host: "{{ smtp_host }}"
+    port: "{{ smtp_port }}"
+    username: "{{ smtp_username | default(omit) }}"
+    password: "{{ smtp_password | default(omit) }}"
+    secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+    from: "{{ email_from }}"
+    to: "{{ email_to | join(',') if email_to is iterable and email_to is not string else email_to }}"
+    cc: "{{ email_cc | join(',') if email_cc | length > 0 else omit }}"
+    subject: "[INFO] {{ notification_title }} - {{ cluster_name }}"
+    subtype: "{{ email_format }}"
+    body: "{{ notification_message }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_email and notify_on_start
+  register: email_start_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  ignore_errors: true
+
+- name: Update notification state
+  ansible.builtin.set_fact:
+    notification_state: "{{ notification_state | combine({'last_notification': 'start', 'notifications_sent': notification_state.notifications_sent | int + 1}) }}"

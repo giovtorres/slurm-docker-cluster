@@ -1,0 +1,129 @@
+{
+  "name": "On-Demand Patching",
+  "description": "Apply patches to specified nodes on-demand. Use for urgent security patches or targeted updates outside scheduled windows.",
+  "job_type": "run",
+  "playbook": "playbooks/rolling_maintenance.yml",
+  "inventory": "Slurm Cluster",
+  "project": "Slurm Maintenance",
+  "ask_variables_on_launch": true,
+  "ask_limit_on_launch": true,
+  "ask_credential_on_launch": false,
+  "survey_enabled": true,
+  "become_enabled": true,
+  "verbosity": 1,
+  "timeout": 7200,
+  "extra_vars": {
+    "notify_slack": true,
+    "notify_on_start": true,
+    "notify_on_success": true,
+    "notify_on_failure": true
+  },
+  "survey_spec": {
+    "name": "On-Demand Patching Parameters",
+    "description": "Configure on-demand patching operation",
+    "spec": [
+      {
+        "question_name": "Target Nodes",
+        "question_description": "Node name, range (node[001-010]), partition name, or inventory group",
+        "required": true,
+        "type": "text",
+        "variable": "target_nodes",
+        "default": ""
+      },
+      {
+        "question_name": "Maintenance Reason",
+        "question_description": "Reason for patching (include CVE numbers if applicable)",
+        "required": true,
+        "type": "text",
+        "variable": "maintenance_reason",
+        "default": "On-demand security patching"
+      },
+      {
+        "question_name": "Patch Type",
+        "question_description": "Type of patches to apply",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "patch_type",
+        "choices": [
+          "security_only",
+          "all_updates",
+          "specific_packages",
+          "custom_command"
+        ],
+        "default": "security_only"
+      },
+      {
+        "question_name": "Specific Packages",
+        "question_description": "If 'specific_packages' selected, list packages (comma-separated)",
+        "required": false,
+        "type": "text",
+        "variable": "specific_packages",
+        "default": ""
+      },
+      {
+        "question_name": "Custom Patch Command",
+        "question_description": "If 'custom_command' selected, specify command",
+        "required": false,
+        "type": "text",
+        "variable": "custom_patch_command",
+        "default": ""
+      },
+      {
+        "question_name": "Batch Size",
+        "question_description": "Number of nodes to patch concurrently",
+        "required": true,
+        "type": "integer",
+        "variable": "batch_size",
+        "min": 1,
+        "max": 50,
+        "default": 5
+      },
+      {
+        "question_name": "Drain Timeout (seconds)",
+        "question_description": "Maximum wait time for running jobs",
+        "required": true,
+        "type": "integer",
+        "variable": "drain_timeout",
+        "min": 60,
+        "max": 7200,
+        "default": 600
+      },
+      {
+        "question_name": "Allow Reboot",
+        "question_description": "Allow automatic reboot if required?",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "allow_reboot",
+        "choices": [
+          "true",
+          "false"
+        ],
+        "default": "false"
+      },
+      {
+        "question_name": "Change Ticket",
+        "question_description": "Change management ticket number",
+        "required": true,
+        "type": "text",
+        "variable": "change_ticket",
+        "default": ""
+      },
+      {
+        "question_name": "Slack Webhook URL",
+        "question_description": "Slack webhook for notifications",
+        "required": false,
+        "type": "password",
+        "variable": "slack_webhook_url",
+        "default": ""
+      }
+    ]
+  },
+  "labels": [
+    "patching",
+    "on-demand",
+    "security"
+  ],
+  "credentials": [
+    "Slurm Nodes SSH"
+  ]
+}

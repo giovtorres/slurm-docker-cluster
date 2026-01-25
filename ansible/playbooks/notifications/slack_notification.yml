@@ -1,0 +1,99 @@
+---
+# Slack Notification Playbook
+#
+# Sends notifications to Slack via incoming webhook.
+# Can be included in other playbooks or run standalone.
+#
+# Required variables:
+#   - slack_webhook_url: Slack incoming webhook URL
+#   - notification_message: Message to send
+#
+# Optional variables:
+#   - notification_channel: Override default channel
+#   - notification_username: Bot username (default: Slurm Maintenance)
+#   - notification_icon_emoji: Bot icon (default: :gear:)
+#   - notification_color: Message color (default: based on status)
+#   - notification_status: success, warning, failure, info
+#   - notification_title: Message title
+#   - notification_fields: Additional fields as list of {title, value, short}
+#
+# Usage:
+#   ansible-playbook notifications/slack_notification.yml \
+#     -e "slack_webhook_url=https://hooks.slack.com/services/XXX" \
+#     -e "notification_message='Maintenance completed successfully'" \
+#     -e "notification_status=success"
+
+- name: Send Slack Notification
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  vars:
+    notification_username: "Slurm Maintenance"
+    notification_icon_emoji: ":gear:"
+    notification_status: "info"
+    notification_title: "Slurm Cluster Notification"
+    notification_fields: []
+
+    # Color mapping based on status
+    status_colors:
+      success: "good"
+      warning: "warning"
+      failure: "danger"
+      info: "#439FE0"
+      critical: "#FF0000"
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - slack_webhook_url is defined
+          - slack_webhook_url | length > 0
+          - notification_message is defined
+        fail_msg: "slack_webhook_url and notification_message are required"
+
+    - name: Set notification color based on status
+      ansible.builtin.set_fact:
+        notification_color: "{{ status_colors[notification_status] | default('#439FE0') }}"
+      when: notification_color is not defined
+
+    - name: Build Slack message payload
+      ansible.builtin.set_fact:
+        slack_payload:
+          username: "{{ notification_username }}"
+          icon_emoji: "{{ notification_icon_emoji }}"
+          channel: "{{ notification_channel | default(omit) }}"
+          attachments:
+            - color: "{{ notification_color }}"
+              title: "{{ notification_title }}"
+              text: "{{ notification_message }}"
+              fields: >-
+                {{
+                  [
+                    {'title': 'Environment', 'value': cluster_name | default('Slurm Cluster'), 'short': true},
+                    {'title': 'Status', 'value': notification_status | upper, 'short': true},
+                    {'title': 'Timestamp', 'value': ansible_date_time.iso8601, 'short': true},
+                    {'title': 'Host', 'value': ansible_hostname, 'short': true}
+                  ] + (notification_fields | default([]))
+                }}
+              footer: "Slurm Rolling Maintenance"
+              footer_icon: "https://raw.githubusercontent.com/SchedMD/slurm/master/doc/html/slurm_logo.png"
+              ts: "{{ ansible_date_time.epoch }}"
+
+    - name: Send Slack notification
+      ansible.builtin.uri:
+        url: "{{ slack_webhook_url }}"
+        method: POST
+        body_format: json
+        body: "{{ slack_payload }}"
+        status_code: [200]
+        timeout: 30
+      register: slack_result
+      retries: 3
+      delay: 5
+      until: slack_result.status == 200
+
+    - name: Log notification sent
+      ansible.builtin.debug:
+        msg: "Slack notification sent successfully to {{ notification_channel | default('default channel') }}"
+      when: slack_result.status == 200

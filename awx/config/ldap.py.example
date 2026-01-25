@@ -1,0 +1,276 @@
+# AWX LDAP/Active Directory Configuration
+#
+# This file configures LDAP authentication for AWX.
+# Copy to ldap.py and customize for your environment.
+#
+# Documentation:
+#   https://docs.ansible.com/automation-controller/latest/html/administration/ldap_auth.html
+#
+# Supports:
+#   - Microsoft Active Directory
+#   - OpenLDAP
+#   - FreeIPA
+#   - LDAP with TLS/SSL
+#
+# Usage:
+#   1. Copy this file to ldap.py
+#   2. Update the settings for your LDAP server
+#   3. Restart AWX services
+#
+
+import ldap
+from django_auth_ldap.config import LDAPSearch, GroupOfNamesType, LDAPSearchUnion
+
+# ==============================================================================
+# LDAP SERVER CONFIGURATION
+# ==============================================================================
+
+# Primary LDAP server URI
+# Use ldaps:// for SSL or ldap:// with STARTTLS
+AUTH_LDAP_SERVER_URI = "ldaps://ldap.example.com:636"
+
+# Secondary LDAP server for failover (optional)
+# AUTH_LDAP_SERVER_URI = "ldaps://ldap1.example.com:636 ldaps://ldap2.example.com:636"
+
+# Bind credentials for LDAP queries
+# Use a service account with read access to the directory
+AUTH_LDAP_BIND_DN = "CN=awx-svc,OU=Service Accounts,DC=example,DC=com"
+AUTH_LDAP_BIND_PASSWORD = "your-secure-service-account-password"
+
+# ==============================================================================
+# TLS/SSL CONFIGURATION
+# ==============================================================================
+
+# TLS options for secure connections
+AUTH_LDAP_CONNECTION_OPTIONS = {
+    # Require certificate validation (recommended for production)
+    ldap.OPT_X_TLS_REQUIRE_CERT: ldap.OPT_X_TLS_DEMAND,
+
+    # Path to CA certificate bundle for validating LDAP server cert
+    # ldap.OPT_X_TLS_CACERTFILE: "/etc/ssl/certs/ca-certificates.crt",
+
+    # For Active Directory, you might need:
+    ldap.OPT_REFERRALS: 0,
+
+    # Network timeout
+    ldap.OPT_NETWORK_TIMEOUT: 10,
+}
+
+# Use STARTTLS (for ldap:// connections only, not ldaps://)
+AUTH_LDAP_START_TLS = False
+
+# ==============================================================================
+# USER SEARCH CONFIGURATION
+# ==============================================================================
+
+# Search base for finding users
+# Active Directory example:
+AUTH_LDAP_USER_SEARCH = LDAPSearch(
+    "OU=Users,DC=example,DC=com",
+    ldap.SCOPE_SUBTREE,
+    "(sAMAccountName=%(user)s)"  # AD uses sAMAccountName
+)
+
+# OpenLDAP example:
+# AUTH_LDAP_USER_SEARCH = LDAPSearch(
+#     "ou=People,dc=example,dc=com",
+#     ldap.SCOPE_SUBTREE,
+#     "(uid=%(user)s)"
+# )
+
+# FreeIPA example:
+# AUTH_LDAP_USER_SEARCH = LDAPSearch(
+#     "cn=users,cn=accounts,dc=example,dc=com",
+#     ldap.SCOPE_SUBTREE,
+#     "(uid=%(user)s)"
+# )
+
+# Search multiple OUs (for complex directory structures)
+# AUTH_LDAP_USER_SEARCH = LDAPSearchUnion(
+#     LDAPSearch("OU=Admins,DC=example,DC=com", ldap.SCOPE_SUBTREE, "(sAMAccountName=%(user)s)"),
+#     LDAPSearch("OU=Users,DC=example,DC=com", ldap.SCOPE_SUBTREE, "(sAMAccountName=%(user)s)"),
+# )
+
+# ==============================================================================
+# USER ATTRIBUTE MAPPING
+# ==============================================================================
+
+# Map LDAP attributes to AWX user fields
+# Active Directory attributes:
+AUTH_LDAP_USER_ATTR_MAP = {
+    "first_name": "givenName",
+    "last_name": "sn",
+    "email": "mail",
+}
+
+# OpenLDAP/FreeIPA attributes (may vary):
+# AUTH_LDAP_USER_ATTR_MAP = {
+#     "first_name": "givenName",
+#     "last_name": "sn",
+#     "email": "mail",
+# }
+
+# ==============================================================================
+# GROUP CONFIGURATION
+# ==============================================================================
+
+# Search base for groups
+AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+    "OU=Groups,DC=example,DC=com",
+    ldap.SCOPE_SUBTREE,
+    "(objectClass=group)"  # AD groups
+)
+
+# OpenLDAP/FreeIPA groups:
+# AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+#     "ou=Groups,dc=example,dc=com",
+#     ldap.SCOPE_SUBTREE,
+#     "(objectClass=groupOfNames)"
+# )
+
+# Group type - varies by LDAP implementation
+# Active Directory:
+AUTH_LDAP_GROUP_TYPE = GroupOfNamesType(name_attr="cn")
+
+# ==============================================================================
+# ACCESS CONTROL - GROUP REQUIREMENTS
+# ==============================================================================
+
+# Require users to be in at least one of these groups to log in
+AUTH_LDAP_REQUIRE_GROUP = "CN=AWX-Users,OU=Groups,DC=example,DC=com"
+
+# Deny access to users in these groups (optional)
+# AUTH_LDAP_DENY_GROUP = "CN=AWX-Denied,OU=Groups,DC=example,DC=com"
+
+# ==============================================================================
+# AWX PERMISSION MAPPING FROM LDAP GROUPS
+# ==============================================================================
+
+# Map LDAP groups to AWX user flags
+AUTH_LDAP_USER_FLAGS_BY_GROUP = {
+    # Grant superuser (admin) status
+    "is_superuser": [
+        "CN=AWX-Admins,OU=Groups,DC=example,DC=com",
+        "CN=Domain Admins,CN=Users,DC=example,DC=com",
+    ],
+    # Grant system auditor status (read-only admin access)
+    "is_system_auditor": [
+        "CN=AWX-Auditors,OU=Groups,DC=example,DC=com",
+    ],
+}
+
+# ==============================================================================
+# AWX ORGANIZATION MAPPING
+# ==============================================================================
+
+# Automatically add users to AWX organizations based on LDAP groups
+AUTH_LDAP_ORGANIZATION_MAP = {
+    # Organization name: group mapping rules
+    "HPC Operations": {
+        # Users in these groups get added to the organization
+        "users": [
+            "CN=HPC-Team,OU=Groups,DC=example,DC=com",
+            "CN=Slurm-Operators,OU=Groups,DC=example,DC=com",
+        ],
+        # Users in these groups become organization admins
+        "admins": [
+            "CN=HPC-Admins,OU=Groups,DC=example,DC=com",
+        ],
+        # Remove users not in the above groups
+        "remove_users": True,
+        # Remove admins not in the above admin groups
+        "remove_admins": True,
+    },
+    "Research Computing": {
+        "users": [
+            "CN=Research-Computing,OU=Groups,DC=example,DC=com",
+        ],
+        "admins": [
+            "CN=RC-Admins,OU=Groups,DC=example,DC=com",
+        ],
+        "remove_users": True,
+        "remove_admins": True,
+    },
+}
+
+# ==============================================================================
+# AWX TEAM MAPPING
+# ==============================================================================
+
+# Map LDAP groups to AWX teams within organizations
+AUTH_LDAP_TEAM_MAP = {
+    # Team name: group mapping rules
+    "Maintenance Operators": {
+        "organization": "HPC Operations",
+        "users": [
+            "CN=Maintenance-Team,OU=Groups,DC=example,DC=com",
+        ],
+        "remove": True,
+    },
+    "Node Administrators": {
+        "organization": "HPC Operations",
+        "users": [
+            "CN=Node-Admins,OU=Groups,DC=example,DC=com",
+        ],
+        "remove": True,
+    },
+}
+
+# ==============================================================================
+# CACHING CONFIGURATION
+# ==============================================================================
+
+# Cache LDAP group memberships for performance
+AUTH_LDAP_CACHE_TIMEOUT = 3600  # 1 hour
+
+# Mirror LDAP groups to Django (creates local group records)
+AUTH_LDAP_MIRROR_GROUPS = True
+
+# ==============================================================================
+# DEBUGGING (Disable in production!)
+# ==============================================================================
+
+# Enable LDAP debug logging
+# import logging
+# logger = logging.getLogger('django_auth_ldap')
+# logger.addHandler(logging.StreamHandler())
+# logger.setLevel(logging.DEBUG)
+
+# ==============================================================================
+# SSO / SAML INTEGRATION NOTES
+# ==============================================================================
+
+# For SAML/SSO integration instead of or in addition to LDAP:
+#
+# 1. SAML 2.0 (via social-auth-core)
+#    - Configure SOCIAL_AUTH_SAML_* settings in settings.py
+#    - Requires IdP metadata XML from your SAML provider
+#    - Supports Azure AD, Okta, OneLogin, ADFS, etc.
+#
+# 2. OAuth 2.0 / OIDC
+#    - Configure SOCIAL_AUTH_OIDC_* settings
+#    - Works with Keycloak, Auth0, Azure AD, Google Workspace
+#
+# 3. GitHub Enterprise
+#    - Configure SOCIAL_AUTH_GITHUB_* settings
+#    - Useful for development/DevOps teams
+#
+# Example SAML settings (add to settings.py):
+#
+# SOCIAL_AUTH_SAML_ENABLED_IDPS = {
+#     "okta": {
+#         "entity_id": "https://awx.example.com/sso/metadata/saml/",
+#         "url": "https://example.okta.com/app/exampleapp/sso/saml",
+#         "x509cert": "MIIDpDCCAoygAwIBAgIGAX...",
+#         "attr_user_permanent_id": "name_id",
+#         "attr_email": "email",
+#         "attr_first_name": "first_name",
+#         "attr_last_name": "last_name",
+#     }
+# }
+#
+# SOCIAL_AUTH_SAML_SP_ENTITY_ID = "https://awx.example.com/sso/metadata/saml/"
+# SOCIAL_AUTH_SAML_SP_PUBLIC_CERT = "<your-sp-certificate>"
+# SOCIAL_AUTH_SAML_SP_PRIVATE_KEY = "<your-sp-private-key>"
+#
+# See: https://docs.ansible.com/automation-controller/latest/html/administration/social_auth.html

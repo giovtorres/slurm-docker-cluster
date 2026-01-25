@@ -1,0 +1,81 @@
+{
+  "name": "Emergency Resume All Nodes",
+  "description": "EMERGENCY: Resume all drained nodes immediately. Use after incident resolution or false alarm.",
+  "job_type": "run",
+  "playbook": "playbooks/emergency_resume.yml",
+  "inventory": "Slurm Cluster",
+  "project": "Slurm Maintenance",
+  "ask_variables_on_launch": true,
+  "ask_limit_on_launch": false,
+  "ask_credential_on_launch": false,
+  "survey_enabled": true,
+  "become_enabled": true,
+  "verbosity": 2,
+  "timeout": 1800,
+  "extra_vars": {
+    "confirm": "yes",
+    "notify_slack": true,
+    "notify_teams": true,
+    "notify_on_start": true,
+    "notify_on_success": true
+  },
+  "survey_spec": {
+    "name": "Emergency Resume Parameters",
+    "description": "Emergency resume configuration",
+    "spec": [
+      {
+        "question_name": "Confirmation",
+        "question_description": "Type 'RESUME-ALL' to proceed with emergency resume",
+        "required": true,
+        "type": "text",
+        "variable": "emergency_confirm",
+        "default": ""
+      },
+      {
+        "question_name": "Resume Reason",
+        "question_description": "Reason for emergency resume (for audit trail)",
+        "required": true,
+        "type": "text",
+        "variable": "resume_reason",
+        "default": "Emergency resume - incident resolved"
+      },
+      {
+        "question_name": "Skip Validation",
+        "question_description": "Skip health validation before resume? (Use only in emergencies)",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "skip_validation",
+        "choices": [
+          "false",
+          "true"
+        ],
+        "default": "false"
+      },
+      {
+        "question_name": "Related Incident Ticket",
+        "question_description": "Original incident ticket number",
+        "required": true,
+        "type": "text",
+        "variable": "incident_ticket",
+        "default": ""
+      },
+      {
+        "question_name": "Operator Name",
+        "question_description": "Name of operator executing resume",
+        "required": true,
+        "type": "text",
+        "variable": "operator_name",
+        "default": ""
+      }
+    ]
+  },
+  "labels": [
+    "emergency",
+    "resume",
+    "on-demand",
+    "recovery"
+  ],
+  "credentials": [
+    "Slurm Nodes SSH"
+  ]
+}

@@ -1,0 +1,102 @@
+---
+# Send progress notification during long maintenance operations
+#
+# Variables used:
+#   - maintenance_id: Unique maintenance operation ID
+#   - nodes_completed: Nodes completed so far
+#   - nodes_total: Total nodes to process
+#   - current_batch: Current batch number
+#   - total_batches: Total number of batches
+#   - current_node: Node currently being processed
+
+- name: Calculate progress percentage
+  ansible.builtin.set_fact:
+    completed_count: "{{ nodes_completed | length if nodes_completed is iterable and nodes_completed is not string else nodes_completed | default(0) }}"
+    total_count: "{{ nodes_total | default(0) }}"
+
+- name: Calculate percentage
+  ansible.builtin.set_fact:
+    progress_percentage: "{{ ((completed_count | int / total_count | int) * 100) | round(1) }}"
+  when: total_count | int > 0
+
+- name: Build progress notification message
+  ansible.builtin.set_fact:
+    notification_message: |
+      Maintenance in progress...
+
+      Progress: {{ completed_count }}/{{ total_count }} nodes ({{ progress_percentage | default('N/A') }}%)
+      Current Batch: {{ current_batch | default('N/A') }}/{{ total_batches | default('N/A') }}
+      Current Node: {{ current_node | default('N/A') }}
+    notification_status: "info"
+    notification_title: "Maintenance Progress Update"
+
+- name: Send Slack progress notification
+  ansible.builtin.uri:
+    url: "{{ slack_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ slack_username }}"
+      icon_emoji: ":hourglass_flowing_sand:"
+      channel: "{{ slack_channel | default(omit) }}"
+      attachments:
+        - color: "#17a2b8"
+          title: "{{ notification_title }} - {{ cluster_name }}"
+          text: "{{ notification_message }}"
+          fields:
+            - title: "Progress"
+              value: "{{ progress_percentage | default('N/A') }}%"
+              short: true
+            - title: "Nodes"
+              value: "{{ completed_count }}/{{ total_count }}"
+              short: true
+            - title: "Batch"
+              value: "{{ current_batch | default('N/A') }}/{{ total_batches | default('N/A') }}"
+              short: true
+            - title: "Updated"
+              value: "{{ ansible_date_time.time }}"
+              short: true
+          footer: "Slurm Rolling Maintenance"
+          ts: "{{ ansible_date_time.epoch }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_slack and notify_on_progress
+  register: slack_progress_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: slack_progress_result.status == 200
+  ignore_errors: true
+
+- name: Send Teams progress notification
+  ansible.builtin.uri:
+    url: "{{ teams_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      "@type": "MessageCard"
+      "@context": "http://schema.org/extensions"
+      themeColor: "0078D7"
+      summary: "Maintenance Progress Update"
+      sections:
+        - activityTitle: "{{ notification_title }}"
+          activitySubtitle: "{{ cluster_name }} - {{ cluster_environment }}"
+          facts:
+            - name: "Progress"
+              value: "{{ progress_percentage | default('N/A') }}%"
+            - name: "Nodes Completed"
+              value: "{{ completed_count }}/{{ total_count }}"
+            - name: "Current Batch"
+              value: "{{ current_batch | default('N/A') }}/{{ total_batches | default('N/A') }}"
+            - name: "Current Node"
+              value: "{{ current_node | default('N/A') }}"
+          text: "{{ notification_message }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_teams and notify_on_progress
+  register: teams_progress_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: teams_progress_result.status in [200, 202]
+  ignore_errors: true
+
+- name: Update notification state
+  ansible.builtin.set_fact:
+    notification_state: "{{ notification_state | combine({'last_notification': 'progress', 'notifications_sent': notification_state.notifications_sent | int + 1}) }}"

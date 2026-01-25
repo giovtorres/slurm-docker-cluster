@@ -1,0 +1,54 @@
+---
+# Default variables for notifications role
+
+# Enable/disable notification channels
+notify_slack: false
+notify_teams: false
+notify_email: false
+
+# When to send notifications
+notify_on_start: true
+notify_on_success: true
+notify_on_failure: true
+notify_on_warning: true
+notify_on_progress: false  # Send progress updates during long operations
+
+# Progress notification interval (in nodes processed)
+notify_progress_interval: 10
+
+# Slack configuration
+slack_webhook_url: ""
+slack_channel: ""
+slack_username: "Slurm Maintenance"
+slack_icon_emoji: ":gear:"
+
+# Microsoft Teams configuration
+teams_webhook_url: ""
+
+# Email configuration
+smtp_host: ""
+smtp_port: 587
+smtp_username: ""
+smtp_password: ""
+smtp_use_tls: true
+email_from: "slurm-maintenance@localhost"
+email_to: []
+email_cc: []
+email_format: "html"
+
+# Cluster identification
+cluster_name: "Slurm Cluster"
+cluster_environment: "production"
+
+# Retry settings for notifications
+notification_retries: 3
+notification_retry_delay: 5
+notification_timeout: 30
+
+# Rate limiting (minimum seconds between notifications of same type)
+notification_rate_limit: 60
+
+# Include detailed reports in notifications
+include_node_details: true
+include_error_details: true
+max_nodes_in_notification: 20  # Truncate node lists longer than this

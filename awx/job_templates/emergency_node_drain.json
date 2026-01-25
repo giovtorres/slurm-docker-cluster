@@ -1,0 +1,96 @@
+{
+  "name": "Emergency Node Drain",
+  "description": "EMERGENCY: Immediately drain specified nodes. Use for urgent situations requiring immediate node removal from service.",
+  "job_type": "run",
+  "playbook": "playbooks/emergency_stop.yml",
+  "inventory": "Slurm Cluster",
+  "project": "Slurm Maintenance",
+  "ask_variables_on_launch": true,
+  "ask_limit_on_launch": true,
+  "ask_credential_on_launch": false,
+  "survey_enabled": true,
+  "become_enabled": true,
+  "verbosity": 2,
+  "timeout": 1800,
+  "extra_vars": {
+    "confirm": "yes",
+    "notify_slack": true,
+    "notify_teams": true,
+    "notify_email": true,
+    "notify_on_start": true,
+    "notify_on_success": true,
+    "notify_on_failure": true
+  },
+  "survey_spec": {
+    "name": "Emergency Drain Parameters",
+    "description": "Emergency node drain configuration",
+    "spec": [
+      {
+        "question_name": "Confirmation",
+        "question_description": "Type 'CONFIRM' to proceed with emergency drain",
+        "required": true,
+        "type": "text",
+        "variable": "emergency_confirm",
+        "default": ""
+      },
+      {
+        "question_name": "Target Nodes",
+        "question_description": "Node name, range (node[001-010]), or 'all' for entire cluster",
+        "required": true,
+        "type": "text",
+        "variable": "target_nodes",
+        "default": ""
+      },
+      {
+        "question_name": "Emergency Reason",
+        "question_description": "Reason for emergency drain (will be visible in Slurm)",
+        "required": true,
+        "type": "text",
+        "variable": "emergency_reason",
+        "default": "EMERGENCY - Immediate drain required"
+      },
+      {
+        "question_name": "Cancel Running Jobs",
+        "question_description": "Force cancel any running jobs on target nodes?",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "cancel_jobs",
+        "choices": [
+          "false",
+          "true"
+        ],
+        "default": "false"
+      },
+      {
+        "question_name": "Incident Ticket",
+        "question_description": "Related incident ticket number",
+        "required": true,
+        "type": "text",
+        "variable": "incident_ticket",
+        "default": ""
+      },
+      {
+        "question_name": "Operator Name",
+        "question_description": "Name of operator executing emergency procedure",
+        "required": true,
+        "type": "text",
+        "variable": "operator_name",
+        "default": ""
+      }
+    ]
+  },
+  "labels": [
+    "emergency",
+    "drain",
+    "on-demand",
+    "critical"
+  ],
+  "credentials": [
+    "Slurm Nodes SSH"
+  ],
+  "notification_templates": {
+    "started": ["Emergency Alert Email", "Emergency Alert Slack", "Emergency Alert PagerDuty"],
+    "success": ["Emergency Alert Email", "Emergency Alert Slack"],
+    "error": ["Emergency Alert Email", "Emergency Alert Slack", "Emergency Alert PagerDuty"]
+  }
+}

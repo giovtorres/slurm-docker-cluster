@@ -1,0 +1,175 @@
+{
+  "name": "Monthly Full Maintenance",
+  "description": "Comprehensive monthly maintenance window including all updates, health checks, and system optimizations. Runs first Saturday of each month at 1:00 AM.",
+  "job_type": "run",
+  "playbook": "playbooks/rolling_maintenance.yml",
+  "inventory": "Slurm Cluster",
+  "project": "Slurm Maintenance",
+  "ask_variables_on_launch": true,
+  "ask_limit_on_launch": true,
+  "ask_credential_on_launch": false,
+  "survey_enabled": true,
+  "become_enabled": true,
+  "verbosity": 1,
+  "timeout": 28800,
+  "extra_vars": {
+    "maintenance_reason": "Monthly full maintenance window",
+    "security_only": false,
+    "update_slurm": true,
+    "allow_reboot": true,
+    "require_validation": true,
+    "check_gpu": true,
+    "notify_slack": true,
+    "notify_teams": true,
+    "notify_on_start": true,
+    "notify_on_success": true,
+    "notify_on_failure": true,
+    "notify_on_progress": true,
+    "notify_progress_interval": 25,
+    "custom_patch_commands": [
+      "yum clean all",
+      "yum update -y",
+      "yum autoremove -y"
+    ],
+    "custom_validation_scripts": [
+      "/opt/slurm/scripts/validate_gpu.sh",
+      "/opt/slurm/scripts/validate_infiniband.sh"
+    ]
+  },
+  "survey_spec": {
+    "name": "Monthly Maintenance Parameters",
+    "description": "Configure comprehensive monthly maintenance",
+    "spec": [
+      {
+        "question_name": "Target Node Group",
+        "question_description": "Which nodes to maintain. Recommended: start with smallest partition for validation.",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "target_nodes",
+        "choices": [
+          "partition_normal",
+          "partition_gpu",
+          "partition_highmem",
+          "partition_debug",
+          "all"
+        ],
+        "default": "partition_debug"
+      },
+      {
+        "question_name": "Batch Size",
+        "question_description": "Number of nodes to maintain concurrently. For full maintenance, smaller batches recommended.",
+        "required": true,
+        "type": "integer",
+        "variable": "batch_size",
+        "min": 1,
+        "max": 20,
+        "default": 3
+      },
+      {
+        "question_name": "Drain Timeout (seconds)",
+        "question_description": "Maximum wait time for jobs. Monthly maintenance may need longer timeouts.",
+        "required": true,
+        "type": "integer",
+        "variable": "drain_timeout",
+        "min": 600,
+        "max": 14400,
+        "default": 3600
+      },
+      {
+        "question_name": "Update Slurm Packages",
+        "question_description": "Include Slurm daemon updates? Requires careful coordination.",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "update_slurm",
+        "choices": [
+          "true",
+          "false"
+        ],
+        "default": "false"
+      },
+      {
+        "question_name": "GPU Validation",
+        "question_description": "Run GPU health checks (for GPU nodes)?",
+        "required": true,
+        "type": "multiplechoice",
+        "variable": "check_gpu",
+        "choices": [
+          "true",
+          "false"
+        ],
+        "default": "true"
+      },
+      {
+        "question_name": "Minimum Free Memory (MB)",
+        "question_description": "Minimum free memory required for node to pass validation.",
+        "required": true,
+        "type": "integer",
+        "variable": "min_free_memory_mb",
+        "min": 512,
+        "max": 16384,
+        "default": 2048
+      },
+      {
+        "question_name": "Maximum Disk Usage (%)",
+        "question_description": "Maximum allowed disk usage percentage.",
+        "required": true,
+        "type": "integer",
+        "variable": "max_disk_usage_percent",
+        "min": 70,
+        "max": 95,
+        "default": 85
+      },
+      {
+        "question_name": "Slack Webhook URL",
+        "question_description": "Slack webhook for notifications",
+        "required": false,
+        "type": "password",
+        "variable": "slack_webhook_url",
+        "default": ""
+      },
+      {
+        "question_name": "Teams Webhook URL",
+        "question_description": "Microsoft Teams webhook for notifications",
+        "required": false,
+        "type": "password",
+        "variable": "teams_webhook_url",
+        "default": ""
+      },
+      {
+        "question_name": "Change Ticket Number",
+        "question_description": "Change management ticket number for audit trail",
+        "required": false,
+        "type": "text",
+        "variable": "change_ticket",
+        "default": ""
+      }
+    ]
+  },
+  "schedule": {
+    "name": "Monthly Full Maintenance - First Saturday 1AM",
+    "description": "Run full maintenance on the first Saturday of each month at 1:00 AM",
+    "enabled": true,
+    "rrule": "DTSTART:20240106T010000Z RRULE:FREQ=MONTHLY;BYDAY=1SA",
+    "extra_data": {
+      "target_nodes": "all",
+      "batch_size": 3,
+      "drain_timeout": 3600,
+      "update_slurm": false,
+      "check_gpu": true
+    }
+  },
+  "labels": [
+    "maintenance",
+    "monthly",
+    "scheduled",
+    "full-update"
+  ],
+  "credentials": [
+    "Slurm Nodes SSH"
+  ],
+  "notification_templates": {
+    "started": ["Maintenance Started Email"],
+    "success": ["Maintenance Success Email", "Maintenance Success Slack"],
+    "error": ["Maintenance Failure Email", "Maintenance Failure Slack", "Maintenance Failure PagerDuty"]
+  }
+}

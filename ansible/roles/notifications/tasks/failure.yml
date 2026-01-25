@@ -1,0 +1,138 @@
+---
+# Send notification on maintenance failure
+#
+# Variables used:
+#   - maintenance_id: Unique maintenance operation ID
+#   - failed_host: Host that failed
+#   - error_message: Error message or details
+#   - failed_task: Task that failed
+#   - nodes_completed: Nodes completed before failure
+#   - nodes_remaining: Nodes not yet processed
+
+- name: Build failure notification message
+  ansible.builtin.set_fact:
+    notification_message: |
+      MAINTENANCE FAILURE - Immediate attention required!
+
+      Failed Host: {{ failed_host | default('Unknown') }}
+      Error: {{ error_message | default('No error message available') }}
+      Failed Task: {{ failed_task | default('Unknown') }}
+
+      The failed node has been left in DRAIN state for investigation.
+    notification_status: "failure"
+    notification_title: "Maintenance FAILED"
+
+- name: Add progress details if available
+  ansible.builtin.set_fact:
+    notification_message: |
+      {{ notification_message }}
+
+      Progress at Failure:
+      - Completed: {{ nodes_completed | length if nodes_completed is iterable else nodes_completed | default(0) }}
+      - Remaining: {{ nodes_remaining | length if nodes_remaining is iterable else nodes_remaining | default('Unknown') }}
+  when: nodes_completed is defined or nodes_remaining is defined
+
+- name: Add error details if enabled
+  ansible.builtin.set_fact:
+    notification_message: |
+      {{ notification_message }}
+
+      Error Details:
+      {{ error_details | default('No additional details available') }}
+  when: include_error_details and error_details is defined
+
+- name: Send Slack failure notification
+  ansible.builtin.uri:
+    url: "{{ slack_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ slack_username }}"
+      icon_emoji: ":x:"
+      channel: "{{ slack_channel | default(omit) }}"
+      attachments:
+        - color: "danger"
+          title: ":rotating_light: {{ notification_title }} - {{ cluster_name }}"
+          text: "{{ notification_message }}"
+          fields:
+            - title: "Environment"
+              value: "{{ cluster_environment }}"
+              short: true
+            - title: "Failed Host"
+              value: "{{ failed_host | default('Unknown') }}"
+              short: true
+            - title: "Maintenance ID"
+              value: "{{ maintenance_id | default('N/A') }}"
+              short: true
+            - title: "Failed At"
+              value: "{{ ansible_date_time.iso8601 }}"
+              short: true
+          footer: "Slurm Rolling Maintenance - REQUIRES ACTION"
+          ts: "{{ ansible_date_time.epoch }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_slack and notify_on_failure
+  register: slack_failure_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: slack_failure_result.status == 200
+  ignore_errors: true
+
+- name: Send Teams failure notification
+  ansible.builtin.uri:
+    url: "{{ teams_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      "@type": "MessageCard"
+      "@context": "http://schema.org/extensions"
+      themeColor: "FF0000"
+      summary: "MAINTENANCE FAILURE - Action Required"
+      sections:
+        - activityTitle: "{{ notification_title }}"
+          activitySubtitle: "{{ cluster_name }} - {{ cluster_environment }}"
+          facts:
+            - name: "Status"
+              value: "FAILED"
+            - name: "Failed Host"
+              value: "{{ failed_host | default('Unknown') }}"
+            - name: "Error"
+              value: "{{ error_message | default('No error message') }}"
+            - name: "Failed Task"
+              value: "{{ failed_task | default('Unknown') }}"
+            - name: "Maintenance ID"
+              value: "{{ maintenance_id | default('N/A') }}"
+            - name: "Failed At"
+              value: "{{ ansible_date_time.iso8601 }}"
+          text: "{{ notification_message }}"
+          markdown: true
+    timeout: "{{ notification_timeout }}"
+  when: notify_teams and notify_on_failure
+  register: teams_failure_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  until: teams_failure_result.status in [200, 202]
+  ignore_errors: true
+
+- name: Send email failure notification
+  community.general.mail:
+    host: "{{ smtp_host }}"
+    port: "{{ smtp_port }}"
+    username: "{{ smtp_username | default(omit) }}"
+    password: "{{ smtp_password | default(omit) }}"
+    secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+    from: "{{ email_from }}"
+    to: "{{ email_to | join(',') if email_to is iterable and email_to is not string else email_to }}"
+    cc: "{{ email_cc | join(',') if email_cc | length > 0 else omit }}"
+    subject: "[FAILURE] {{ notification_title }} - {{ cluster_name }} - IMMEDIATE ACTION REQUIRED"
+    subtype: "{{ email_format }}"
+    body: "{{ notification_message }}"
+    timeout: "{{ notification_timeout }}"
+  when: notify_email and notify_on_failure
+  register: email_failure_result
+  retries: "{{ notification_retries }}"
+  delay: "{{ notification_retry_delay }}"
+  ignore_errors: true
+
+- name: Update notification state
+  ansible.builtin.set_fact:
+    notification_state: "{{ notification_state | combine({'last_notification': 'failure', 'notifications_sent': notification_state.notifications_sent | int + 1}) }}"

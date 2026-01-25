@@ -1,0 +1,230 @@
+---
+# Email Notification Playbook
+#
+# Sends notifications via SMTP email.
+# Supports HTML and plain text formats with attachments.
+#
+# Required variables:
+#   - email_to: Recipient email address(es) - comma-separated or list
+#   - notification_message: Email body content
+#   - smtp_host: SMTP server hostname
+#
+# Optional variables:
+#   - smtp_port: SMTP port (default: 587)
+#   - smtp_username: SMTP authentication username
+#   - smtp_password: SMTP authentication password
+#   - smtp_use_tls: Use TLS (default: true)
+#   - email_from: Sender email address
+#   - email_cc: CC recipients
+#   - email_subject: Email subject line
+#   - notification_status: success, warning, failure, info, critical
+#   - notification_title: Email title in body
+#   - email_format: html or plain (default: html)
+#   - email_attachments: List of file paths to attach
+#   - maintenance_id: Maintenance operation ID
+#   - maintenance_report: Detailed maintenance report data
+#
+# Usage:
+#   ansible-playbook notifications/email_notification.yml \
+#     -e "smtp_host=smtp.example.com" \
+#     -e "email_to=ops@example.com" \
+#     -e "notification_message='Maintenance completed on 10 nodes'" \
+#     -e "notification_status=success"
+
+- name: Send Email Notification
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  vars:
+    smtp_port: 587
+    smtp_use_tls: true
+    email_from: "slurm-maintenance@{{ ansible_fqdn | default('localhost') }}"
+    notification_status: "info"
+    notification_title: "Slurm Cluster Notification"
+    email_format: "html"
+    email_attachments: []
+
+    # Status styling for HTML emails
+    status_styles:
+      success:
+        color: "#28a745"
+        icon: "[OK]"
+        background: "#d4edda"
+      warning:
+        color: "#ffc107"
+        icon: "[WARN]"
+        background: "#fff3cd"
+      failure:
+        color: "#dc3545"
+        icon: "[FAIL]"
+        background: "#f8d7da"
+      info:
+        color: "#17a2b8"
+        icon: "[INFO]"
+        background: "#d1ecf1"
+      critical:
+        color: "#721c24"
+        icon: "[CRIT]"
+        background: "#f5c6cb"
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - email_to is defined
+          - notification_message is defined
+          - smtp_host is defined
+        fail_msg: "email_to, notification_message, and smtp_host are required"
+
+    - name: Set status styling
+      ansible.builtin.set_fact:
+        status_style: "{{ status_styles[notification_status] | default(status_styles.info) }}"
+
+    - name: Generate default subject if not provided
+      ansible.builtin.set_fact:
+        email_subject: "{{ status_style.icon }} {{ notification_title }} - {{ notification_status | upper }}"
+      when: email_subject is not defined
+
+    - name: Build HTML email body
+      ansible.builtin.set_fact:
+        email_body: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: {{ status_style.background }}; border-left: 4px solid {{ status_style.color }}; padding: 15px; margin-bottom: 20px; }
+              .header h1 { margin: 0; color: {{ status_style.color }}; font-size: 24px; }
+              .status-badge { display: inline-block; padding: 5px 10px; background: {{ status_style.color }}; color: white; border-radius: 3px; font-weight: bold; }
+              .content { padding: 15px; background: #f9f9f9; border-radius: 5px; }
+              .details { margin-top: 20px; }
+              .details table { width: 100%; border-collapse: collapse; }
+              .details th, .details td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+              .details th { background: #f0f0f0; width: 30%; }
+              .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+              pre { background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>{{ notification_title }}</h1>
+                <span class="status-badge">{{ notification_status | upper }}</span>
+              </div>
+
+              <div class="content">
+                <p>{{ notification_message }}</p>
+              </div>
+
+              <div class="details">
+                <table>
+                  <tr>
+                    <th>Cluster</th>
+                    <td>{{ cluster_name | default('Slurm Cluster') }}</td>
+                  </tr>
+                  <tr>
+                    <th>Timestamp</th>
+                    <td>{{ ansible_date_time.iso8601 }}</td>
+                  </tr>
+                  {% if maintenance_id is defined %}
+                  <tr>
+                    <th>Maintenance ID</th>
+                    <td>{{ maintenance_id }}</td>
+                  </tr>
+                  {% endif %}
+                  {% if target_nodes is defined %}
+                  <tr>
+                    <th>Target Nodes</th>
+                    <td>{{ target_nodes }}</td>
+                  </tr>
+                  {% endif %}
+                  {% if batch_size is defined %}
+                  <tr>
+                    <th>Batch Size</th>
+                    <td>{{ batch_size }}</td>
+                  </tr>
+                  {% endif %}
+                  {% if nodes_completed is defined %}
+                  <tr>
+                    <th>Nodes Completed</th>
+                    <td>{{ nodes_completed }}</td>
+                  </tr>
+                  {% endif %}
+                  {% if nodes_failed is defined %}
+                  <tr>
+                    <th>Nodes Failed</th>
+                    <td>{{ nodes_failed }}</td>
+                  </tr>
+                  {% endif %}
+                </table>
+              </div>
+
+              {% if maintenance_report is defined %}
+              <div class="details">
+                <h3>Maintenance Report</h3>
+                <pre>{{ maintenance_report | to_nice_yaml }}</pre>
+              </div>
+              {% endif %}
+
+              <div class="footer">
+                <p>This is an automated message from the Slurm Rolling Maintenance system.</p>
+                <p>Generated by Ansible on {{ ansible_hostname }} at {{ ansible_date_time.iso8601 }}</p>
+              </div>
+            </div>
+          </body>
+          </html>
+      when: email_format == 'html'
+
+    - name: Build plain text email body
+      ansible.builtin.set_fact:
+        email_body: |
+          {{ status_style.icon }} {{ notification_title }}
+          ============================================
+          Status: {{ notification_status | upper }}
+
+          {{ notification_message }}
+
+          Details:
+          - Cluster: {{ cluster_name | default('Slurm Cluster') }}
+          - Timestamp: {{ ansible_date_time.iso8601 }}
+          {% if maintenance_id is defined %}- Maintenance ID: {{ maintenance_id }}{% endif %}
+          {% if target_nodes is defined %}- Target Nodes: {{ target_nodes }}{% endif %}
+          {% if batch_size is defined %}- Batch Size: {{ batch_size }}{% endif %}
+          {% if nodes_completed is defined %}- Nodes Completed: {{ nodes_completed }}{% endif %}
+          {% if nodes_failed is defined %}- Nodes Failed: {{ nodes_failed }}{% endif %}
+
+          {% if maintenance_report is defined %}
+          Maintenance Report:
+          {{ maintenance_report | to_nice_yaml }}
+          {% endif %}
+
+          ---
+          This is an automated message from the Slurm Rolling Maintenance system.
+          Generated by Ansible on {{ ansible_hostname }} at {{ ansible_date_time.iso8601 }}
+      when: email_format == 'plain'
+
+    - name: Send email notification
+      community.general.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_username | default(omit) }}"
+        password: "{{ smtp_password | default(omit) }}"
+        secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+        from: "{{ email_from }}"
+        to: "{{ email_to }}"
+        cc: "{{ email_cc | default(omit) }}"
+        subject: "{{ email_subject }}"
+        subtype: "{{ email_format }}"
+        body: "{{ email_body }}"
+        attach: "{{ email_attachments if email_attachments | length > 0 else omit }}"
+        charset: utf-8
+        timeout: 60
+      register: email_result
+
+    - name: Log email sent
+      ansible.builtin.debug:
+        msg: "Email notification sent successfully to {{ email_to }}"
+      when: email_result is success
