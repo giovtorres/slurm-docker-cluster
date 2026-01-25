@@ -1,0 +1,75 @@
+# Queue Pressure Experiment
+# Tests sustained queue backlog handling
+
+name: queue_pressure
+description: Evaluate scheduler behavior under sustained queue backlog
+version: "1.0"
+
+# Experiment configuration
+config:
+  recommended_nodes: 5  # Intentionally under-provisioned
+  expected_duration: 600  # seconds
+  metrics_interval: 10    # seconds
+
+# Execution phases
+phases:
+  - name: build_backlog
+    description: Quickly build up a job backlog
+    jobs:
+      - type: cpu
+        count: 50
+        duration: 120
+        cpus: 2
+      - type: sleep
+        count: 100
+        duration: 180
+    delay: 0
+
+  - name: maintain_pressure
+    description: Continue submitting jobs to maintain backlog
+    jobs:
+      - type: sleep
+        count: 30
+        duration: 90
+      - type: cpu
+        count: 20
+        duration: 90
+        cpus: 1
+    delay: 30
+
+  - name: spike
+    description: Add sudden spike on top of backlog
+    jobs:
+      - type: sleep
+        count: 50
+        duration: 30
+    delay: 60
+
+  - name: drain
+    description: Stop submitting and observe drain
+    jobs: []
+    delay: 0
+
+# Success criteria
+success_criteria:
+  - metric: scheduler_stability
+    condition: true
+    description: "Scheduler should remain responsive"
+  - metric: fair_ordering
+    condition: true
+    description: "Jobs should be scheduled roughly in submission order"
+
+# Analysis points
+analysis:
+  - "Maximum queue depth"
+  - "Queue depth over time"
+  - "Job wait time vs submission time"
+  - "Scheduler decisions per second"
+  - "Resource utilization during backlog"
+
+# Tags
+tags:
+  - queue
+  - backlog
+  - sustained-load
+  - scheduler-stress

@@ -1,0 +1,74 @@
+{
+  "name": "steady",
+  "description": "Steady-state workload for baseline testing",
+  "version": "1.0",
+  "phases": [
+    {
+      "name": "ramp_up",
+      "description": "Gradually ramp up workload",
+      "jobs": [
+        {
+          "type": "sleep",
+          "count": 10,
+          "duration": 120,
+          "name": "steady_sleep"
+        }
+      ],
+      "delay": 30
+    },
+    {
+      "name": "steady_state",
+      "description": "Maintain steady workload",
+      "jobs": [
+        {
+          "type": "cpu",
+          "count": 5,
+          "duration": 120,
+          "cpus": 1,
+          "intensity": "medium",
+          "name": "steady_cpu"
+        },
+        {
+          "type": "memory",
+          "count": 5,
+          "duration": 120,
+          "memory_mb": 512,
+          "pattern": "hold",
+          "name": "steady_mem"
+        }
+      ],
+      "delay": 30
+    },
+    {
+      "name": "continued_load",
+      "description": "Continue steady workload",
+      "jobs": [
+        {
+          "type": "sleep",
+          "count": 10,
+          "duration": 90,
+          "name": "steady_sleep2"
+        },
+        {
+          "type": "cpu",
+          "count": 5,
+          "duration": 90,
+          "cpus": 1,
+          "intensity": "light",
+          "name": "steady_cpu2"
+        }
+      ],
+      "delay": 0
+    }
+  ],
+  "expected_behavior": {
+    "queue_depth": "Relatively stable queue depth",
+    "utilization": "Moderate CPU utilization (50-70%)",
+    "completion": "Gradual, steady job completion"
+  },
+  "metrics_to_watch": [
+    "queue_depth_stability",
+    "throughput_rate",
+    "resource_utilization"
+  ]
+}

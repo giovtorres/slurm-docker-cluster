@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slurm-playground"
+version = "0.1.0"
+description = "CLI tool for Slurm playground - generate workloads, scale clusters, and explore behavior"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Slurm Docker Cluster Contributors"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Clustering",
+    "Topic :: System :: Systems Administration",
+]
+keywords = ["slurm", "hpc", "cluster", "workload", "testing"]
+
+dependencies = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "jinja2>=3.0.0",
+    "pyyaml>=6.0",
+    "docker>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+playground = "slurm_playground.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/giovtorres/slurm-docker-cluster"
+Repository = "https://github.com/giovtorres/slurm-docker-cluster"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["slurm_playground*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]

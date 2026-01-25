@@ -1,0 +1,82 @@
+{
+  "name": "stress",
+  "description": "High-stress workload to test cluster limits",
+  "version": "1.0",
+  "phases": [
+    {
+      "name": "cpu_saturation",
+      "description": "Saturate all CPUs with compute-intensive jobs",
+      "jobs": [
+        {
+          "type": "cpu",
+          "count": 30,
+          "duration": 120,
+          "cpus": 2,
+          "intensity": "heavy",
+          "name": "stress_cpu"
+        }
+      ],
+      "delay": 5
+    },
+    {
+      "name": "memory_pressure",
+      "description": "Add memory-intensive jobs while CPU is saturated",
+      "jobs": [
+        {
+          "type": "memory",
+          "count": 15,
+          "duration": 90,
+          "memory_mb": 800,
+          "pattern": "random",
+          "name": "stress_mem"
+        }
+      ],
+      "delay": 5
+    },
+    {
+      "name": "mixed_overload",
+      "description": "Overload with mixed job types",
+      "jobs": [
+        {
+          "type": "cpu",
+          "count": 20,
+          "duration": 60,
+          "cpus": 1,
+          "intensity": "medium",
+          "name": "overload_cpu"
+        },
+        {
+          "type": "memory",
+          "count": 10,
+          "duration": 60,
+          "memory_mb": 500,
+          "pattern": "sequential",
+          "name": "overload_mem"
+        },
+        {
+          "type": "sleep",
+          "count": 50,
+          "duration": 30,
+          "name": "overload_sleep"
+        }
+      ],
+      "delay": 0
+    }
+  ],
+  "expected_behavior": {
+    "queue_depth": "Very high queue depth, potential backlog",
+    "utilization": "100% CPU and memory utilization",
+    "completion": "Slow completion rate due to resource contention"
+  },
+  "metrics_to_watch": [
+    "max_queue_depth",
+    "job_failures",
+    "oom_events",
+    "scheduler_latency"
+  ],
+  "warnings": [
+    "This profile may cause job failures due to resource exhaustion",
+    "Monitor for OOM killer activity",
+    "May require cluster reset after completion"
+  ]
+}

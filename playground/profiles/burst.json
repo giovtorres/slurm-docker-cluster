@@ -1,0 +1,51 @@
+{
+  "name": "burst",
+  "description": "Sudden burst of jobs to test queue handling",
+  "version": "1.0",
+  "phases": [
+    {
+      "name": "initial_burst",
+      "description": "Submit a large batch of short jobs quickly",
+      "jobs": [
+        {
+          "type": "sleep",
+          "count": 50,
+          "duration": 30,
+          "name": "burst_sleep"
+        }
+      ],
+      "delay": 0
+    },
+    {
+      "name": "secondary_wave",
+      "description": "Second wave of mixed jobs",
+      "jobs": [
+        {
+          "type": "cpu",
+          "count": 20,
+          "duration": 60,
+          "cpus": 1,
+          "intensity": "light",
+          "name": "burst_cpu"
+        },
+        {
+          "type": "sleep",
+          "count": 30,
+          "duration": 45,
+          "name": "burst_sleep2"
+        }
+      ],
+      "delay": 10
+    }
+  ],
+  "expected_behavior": {
+    "queue_depth": "High queue depth initially, draining over time",
+    "utilization": "Should reach 100% CPU utilization quickly",
+    "completion": "Most jobs should complete within 2-3 minutes"
+  },
+  "metrics_to_watch": [
+    "queue_pending_jobs",
+    "cpu_utilization",
+    "average_wait_time"
+  ]
+}

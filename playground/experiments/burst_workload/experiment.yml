@@ -1,0 +1,74 @@
+# Burst Workload Experiment
+# Tests cluster behavior under sudden job submission spikes
+
+name: burst_workload
+description: Evaluate cluster response to sudden bursts of job submissions
+version: "1.0"
+
+# Experiment configuration
+config:
+  recommended_nodes: 10
+  expected_duration: 300  # seconds
+  metrics_interval: 5     # seconds
+
+# Execution phases
+phases:
+  - name: baseline
+    description: Establish baseline metrics with empty queue
+    jobs: []
+    delay: 10  # Collect baseline metrics for 10 seconds
+
+  - name: initial_burst
+    description: Submit initial burst of 50 jobs simultaneously
+    jobs:
+      - type: sleep
+        count: 50
+        duration: 30
+    delay: 5
+
+  - name: second_burst
+    description: Submit second burst before first completes
+    jobs:
+      - type: cpu
+        count: 30
+        duration: 45
+        cpus: 1
+      - type: sleep
+        count: 20
+        duration: 60
+    delay: 10
+
+  - name: sustained_pressure
+    description: Maintain job submission pressure
+    jobs:
+      - type: sleep
+        count: 40
+        duration: 30
+      - type: memory
+        count: 10
+        duration: 45
+        memory: 512M
+    delay: 0
+
+# Success criteria
+success_criteria:
+  - metric: all_jobs_completed
+    condition: true
+  - metric: max_wait_time
+    condition: "< 120"  # seconds
+  - metric: job_failures
+    condition: "== 0"
+
+# Analysis points
+analysis:
+  - "Peak queue depth during bursts"
+  - "Time to drain queue after each burst"
+  - "CPU utilization curve"
+  - "Job wait time distribution"
+  - "Scheduler response latency"
+
+# Tags for filtering
+tags:
+  - burst
+  - stress-test
+  - queue-behavior

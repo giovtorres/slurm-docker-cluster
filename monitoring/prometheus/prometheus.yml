@@ -1,0 +1,44 @@
+# Prometheus configuration for Slurm Playground
+# Scrapes metrics from Slurm exporter and system metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'slurm-playground'
+
+# Alerting configuration (optional)
+alerting:
+  alertmanagers: []
+
+# Rule files (optional)
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scheme: http
+
+  # Slurm metrics exporter
+  - job_name: 'slurm'
+    static_configs:
+      - targets: ['slurm-exporter:9341']
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+    scrape_timeout: 10s
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: /metrics
+    scheme: http
+
+# Remote write (optional, for long-term storage)
+# remote_write:
+#   - url: "http://remote-storage:9201/write"

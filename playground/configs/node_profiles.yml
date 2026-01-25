@@ -1,0 +1,116 @@
+# Node profile definitions for Slurm playground
+# These define the resource characteristics for different node types
+
+profiles:
+  standard:
+    cpus: 2
+    memory: 1000  # MB
+    features: []
+    description: "Standard compute node"
+
+  highmem:
+    cpus: 2
+    memory: 4000  # MB
+    features:
+      - highmem
+    description: "High memory node for memory-intensive workloads"
+
+  highcpu:
+    cpus: 4
+    memory: 2000  # MB
+    features:
+      - highcpu
+    description: "High CPU node for compute-intensive workloads"
+
+  gpu:
+    cpus: 2
+    memory: 2000  # MB
+    features:
+      - gpu
+    gres: "gpu:1"
+    description: "GPU-enabled node (simulated)"
+
+  tiny:
+    cpus: 1
+    memory: 512  # MB
+    features:
+      - tiny
+    description: "Minimal node for testing"
+
+  large:
+    cpus: 8
+    memory: 8000  # MB
+    features:
+      - large
+    description: "Large node with substantial resources"
+
+# Default partition configurations
+partitions:
+  default:
+    - name: normal
+      nodes_pattern: "c[1-{n}]"
+      default: true
+      max_time: "INFINITE"
+      priority: 1
+
+  with_specialized:
+    - name: normal
+      nodes_pattern: "c[1-{n}]"
+      default: true
+      max_time: "INFINITE"
+      priority: 1
+
+    - name: highmem
+      nodes_pattern: "hm[1-{hm}]"
+      default: false
+      max_time: "24:00:00"
+      priority: 2
+
+    - name: highcpu
+      nodes_pattern: "hc[1-{hc}]"
+      default: false
+      max_time: "12:00:00"
+      priority: 2
+
+    - name: gpu
+      nodes_pattern: "gpu[1-{gpu}]"
+      default: false
+      max_time: "8:00:00"
+      priority: 3
+
+# Scaling presets
+presets:
+  minimal:
+    description: "Minimal 2-node cluster for basic testing"
+    standard: 2
+    highmem: 0
+    highcpu: 0
+    gpu: 0
+
+  small:
+    description: "Small 5-node cluster"
+    standard: 5
+    highmem: 0
+    highcpu: 0
+    gpu: 0
+
+  medium:
+    description: "Medium cluster with specialized nodes"
+    standard: 10
+    highmem: 2
+    highcpu: 2
+    gpu: 0
+
+  large:
+    description: "Large cluster with all node types"
+    standard: 20
+    highmem: 2
+    highcpu: 2
+    gpu: 2
+
+  gpu_focused:
+    description: "GPU-focused cluster for GPU testing"
+    standard: 4
+    highmem: 0
+    highcpu: 0
+    gpu: 4

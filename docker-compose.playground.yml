@@ -1,0 +1,172 @@
+# Playground override for scalable Slurm cluster
+# Usage: docker compose -f docker-compose.yml -f docker-compose.playground.yml up -d
+
+x-slurm-node: &slurm-node
+  image: ghcr.io/giovtorres/slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+  command: ["slurmd"]
+  privileged: true
+  working_dir: /data
+  volumes:
+    - etc_munge:/etc/munge:z
+    - etc_slurm:/etc/slurm:z
+    - slurm_jobdir:/data:z
+    - var_log_slurm:/var/log/slurm:z
+  expose:
+    - "6818"
+  depends_on:
+    slurmctld:
+      condition: service_healthy
+  networks:
+    - slurm-network
+  healthcheck:
+    test: ["CMD", "pidof", "slurmd"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
+
+x-node-standard: &node-standard
+  <<: *slurm-node
+  environment:
+    - SLURM_NODE_TYPE=standard
+
+x-node-highmem: &node-highmem
+  <<: *slurm-node
+  environment:
+    - SLURM_NODE_TYPE=highmem
+  mem_limit: 4g
+
+x-node-highcpu: &node-highcpu
+  <<: *slurm-node
+  environment:
+    - SLURM_NODE_TYPE=highcpu
+  cpus: 4
+
+x-node-gpu: &node-gpu
+  <<: *slurm-node
+  environment:
+    - SLURM_NODE_TYPE=gpu
+    - CUDA_VISIBLE_DEVICES=0
+
+services:
+  # Override slurmctld to enable stress tools
+  slurmctld:
+    environment:
+      - PLAYGROUND_MODE=true
+
+  # Base compute nodes (can be scaled with --scale)
+  c1:
+    <<: *node-standard
+
+  c2:
+    <<: *node-standard
+
+  # Extended standard nodes (c3-c10)
+  c3:
+    <<: *node-standard
+    profiles: ["scale-5", "scale-10", "scale-20"]
+
+  c4:
+    <<: *node-standard
+    profiles: ["scale-5", "scale-10", "scale-20"]
+
+  c5:
+    <<: *node-standard
+    profiles: ["scale-5", "scale-10", "scale-20"]
+
+  c6:
+    <<: *node-standard
+    profiles: ["scale-10", "scale-20"]
+
+  c7:
+    <<: *node-standard
+    profiles: ["scale-10", "scale-20"]
+
+  c8:
+    <<: *node-standard
+    profiles: ["scale-10", "scale-20"]
+
+  c9:
+    <<: *node-standard
+    profiles: ["scale-10", "scale-20"]
+
+  c10:
+    <<: *node-standard
+    profiles: ["scale-10", "scale-20"]
+
+  # Extended nodes (c11-c20)
+  c11:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c12:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c13:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c14:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c15:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c16:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c17:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c18:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c19:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  c20:
+    <<: *node-standard
+    profiles: ["scale-20"]
+
+  # High-memory nodes
+  hm1:
+    <<: *node-highmem
+    profiles: ["highmem", "scale-10", "scale-20"]
+
+  hm2:
+    <<: *node-highmem
+    profiles: ["highmem", "scale-10", "scale-20"]
+
+  # High-CPU nodes
+  hc1:
+    <<: *node-highcpu
+    profiles: ["highcpu", "scale-10", "scale-20"]
+
+  hc2:
+    <<: *node-highcpu
+    profiles: ["highcpu", "scale-10", "scale-20"]
+
+  # GPU simulation nodes
+  gpu1:
+    <<: *node-gpu
+    profiles: ["gpu", "scale-20"]
+
+  gpu2:
+    <<: *node-gpu
+    profiles: ["gpu", "scale-20"]
+
+volumes:
+  etc_munge:
+  etc_slurm:
+  slurm_jobdir:
+  var_log_slurm:
+
+networks:
+  slurm-network:

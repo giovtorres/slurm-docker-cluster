@@ -1,0 +1,78 @@
+# Fair Share Experiment
+# Tests fair share scheduling between multiple users/accounts
+
+name: fair_share
+description: Evaluate fair share scheduling behavior
+version: "1.0"
+
+# Experiment configuration
+config:
+  recommended_nodes: 10
+  expected_duration: 600  # seconds
+  metrics_interval: 10    # seconds
+  requires_accounts: true
+
+# Note: This experiment ideally requires multiple user accounts
+# In single-user mode, it tests partition-based fairness
+
+# Execution phases
+phases:
+  - name: heavy_user
+    description: One "user" submits many jobs
+    jobs:
+      - type: cpu
+        count: 100
+        duration: 60
+        cpus: 1
+    delay: 10
+
+  - name: light_user
+    description: Another "user" submits fewer jobs
+    jobs:
+      - type: cpu
+        count: 20
+        duration: 60
+        cpus: 1
+    delay: 0
+
+  - name: priority_jobs
+    description: Submit some high-priority jobs
+    jobs:
+      - type: sleep
+        count: 10
+        duration: 30
+    delay: 30
+
+  - name: observe
+    description: Observe scheduling fairness
+    jobs: []
+    delay: 120
+
+# Success criteria
+success_criteria:
+  - metric: light_user_not_starved
+    condition: true
+    description: "Light user jobs should not wait excessively"
+  - metric: fair_distribution
+    condition: true
+    description: "Resources distributed fairly over time"
+
+# Analysis points
+analysis:
+  - "Wait time by user/account"
+  - "Resource allocation over time per user"
+  - "Priority effectiveness"
+  - "Fairshare score evolution"
+
+# Required Slurm configuration
+slurm_config_notes:
+  - "PriorityType=priority/multifactor"
+  - "PriorityWeightFairshare should be > 0"
+  - "AccountingStorageEnforce should include 'limits'"
+
+# Tags
+tags:
+  - fair-share
+  - priority
+  - multi-user
+  - scheduling-policy

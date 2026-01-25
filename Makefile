@@ -1,4 +1,5 @@
-.PHONY: help build up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version
+.PHONY: help build up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version \
+	playground-init playground-start playground-stop playground-reset playground-shell playground-logs playground-metrics playground-scale playground-workload
 
 # Default target
 .DEFAULT_GOAL := help
@@ -46,10 +47,22 @@ help:  ## Show this help message
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-version" "Test a specific version (requires VER=...)"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-all" "Test all supported versions"
 	@echo ""
+	@echo "Playground (Learning & Testing):"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-init" "Install CLI and prepare playground"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-start" "Start playground cluster (NODES=N, PROFILE=...)"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-stop" "Stop playground cluster"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-reset" "Reset to default 2-node cluster"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-shell" "Shell into slurmctld"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-logs" "Tail playground logs"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-metrics" "Open Grafana dashboard"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-status" "Show playground status"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make update-slurm FILES=\"slurm.conf slurmdbd.conf\""
 	@echo "  make set-version VER=24.11.6"
 	@echo "  make test-version VER=24.11.6"
+	@echo "  make playground-start NODES=10"
+	@echo "  make playground-start PROFILE=medium"
 
 build:  ## Build Docker images
 	docker compose --progress plain build
@@ -182,3 +195,118 @@ test-all:  ## Run test suite against all supported versions
 	echo "========================================";
 
 rebuild: clean build up
+
+# =============================================================================
+# Playground Targets
+# =============================================================================
+
+# Default playground settings
+NODES ?= 2
+PROFILE ?=
+
+playground-init:  ## Initialize playground - install CLI and check dependencies
+	@echo "Initializing Slurm Playground..."
+	@echo ""
+	@echo "Checking Python environment..."
+	@python3 --version || (echo "Error: Python 3 required" && exit 1)
+	@echo ""
+	@echo "Installing playground CLI..."
+	@pip3 install -e playground/cli --quiet || pip3 install -e playground/cli
+	@echo ""
+	@echo "Verifying installation..."
+	@playground --version || echo "Note: You may need to add ~/.local/bin to PATH"
+	@echo ""
+	@echo "✓ Playground initialized successfully!"
+	@echo ""
+	@echo "Quick start:"
+	@echo "  make playground-start        # Start with 2 nodes"
+	@echo "  make playground-start NODES=10  # Start with 10 nodes"
+	@echo "  playground --help            # CLI help"
+
+playground-start:  ## Start playground cluster (use NODES=N or PROFILE=name)
+	@echo "Starting Slurm Playground..."
+ifdef PROFILE
+	@echo "Applying profile: $(PROFILE)"
+	@./playground/scale.sh preset $(PROFILE)
+else
+	@echo "Scaling to $(NODES) nodes..."
+	@./playground/scale.sh set $(NODES)
+endif
+	@docker compose up -d
+	@echo ""
+	@echo "Waiting for cluster to be ready..."
+	@sleep 15
+	@echo ""
+	@docker exec slurmctld sinfo 2>/dev/null || echo "Cluster starting up..."
+	@echo ""
+	@echo "✓ Playground started!"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  playground status            # Check cluster status"
+	@echo "  playground workload cpu -c 5 # Submit CPU jobs"
+	@echo "  playground metrics live      # View live metrics"
+
+playground-stop:  ## Stop playground cluster
+	@echo "Stopping Slurm Playground..."
+	docker compose down
+	@echo "✓ Playground stopped"
+
+playground-reset:  ## Reset playground to default 2-node configuration
+	@echo "Resetting playground to default configuration..."
+	@./playground/scale.sh reset
+	@echo ""
+	@echo "Cancelling any running jobs..."
+	@docker exec slurmctld scancel -u root 2>/dev/null || true
+	@echo ""
+	@echo "Cleaning up job output files..."
+	@docker exec slurmctld bash -c "rm -f /data/*.out /data/*.err" 2>/dev/null || true
+	@echo ""
+	@echo "✓ Playground reset complete"
+
+playground-shell:  ## Open interactive shell in slurmctld container
+	docker exec -it slurmctld bash
+
+playground-logs:  ## Tail logs from all playground containers
+	docker compose logs -f --tail=50
+
+playground-metrics:  ## Start monitoring stack and open Grafana
+	@echo "Starting monitoring stack..."
+	@docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d prometheus grafana slurm-exporter 2>/dev/null || \
+		(echo "Starting monitoring requires the base cluster to be running" && exit 1)
+	@echo ""
+	@echo "Waiting for Grafana to start..."
+	@sleep 5
+	@echo ""
+	@echo "✓ Monitoring stack started!"
+	@echo ""
+	@echo "Access URLs:"
+	@echo "  Grafana:    http://localhost:3000  (admin/admin)"
+	@echo "  Prometheus: http://localhost:9090"
+	@echo ""
+	@which open >/dev/null 2>&1 && open http://localhost:3000 || echo "Open http://localhost:3000 in your browser"
+
+playground-status:  ## Show comprehensive playground status
+	@echo "=== Slurm Playground Status ==="
+	@echo ""
+	@echo "Containers:"
+	@docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  Not running"
+	@echo ""
+	@echo "Cluster Info:"
+	@docker exec slurmctld sinfo 2>/dev/null || echo "  Not available"
+	@echo ""
+	@echo "Queue:"
+	@docker exec slurmctld squeue 2>/dev/null || echo "  Not available"
+	@echo ""
+	@echo "Resource Usage:"
+	@docker exec slurmctld sinfo -o "%C" 2>/dev/null | head -2 || echo "  Not available"
+
+playground-scale:  ## Scale cluster (use NODES=N)
+	@echo "Scaling cluster to $(NODES) nodes..."
+	@./playground/scale.sh set $(NODES)
+	@echo ""
+	@echo "Verifying configuration..."
+	@docker exec slurmctld sinfo 2>/dev/null || echo "Run 'make playground-start' to apply changes"
+
+playground-workload:  ## Submit sample workload (use TYPE=cpu|memory|sleep COUNT=N)
+	@echo "Submitting workload..."
+	@playground workload $(or $(TYPE),sleep) --count=$(or $(COUNT),5)
