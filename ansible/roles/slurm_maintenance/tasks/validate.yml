@@ -1,0 +1,121 @@
+---
+# Node validation tasks
+
+- name: Ensure slurmd service is running
+  ansible.builtin.service:
+    name: slurmd
+    state: started
+    enabled: true
+  register: slurmd_service
+
+- name: Wait for slurmd to be responsive
+  ansible.builtin.wait_for:
+    port: 6818  # Default slurmd port
+    host: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+    timeout: 60
+  ignore_errors: true
+
+- name: Verify controller communication
+  ansible.builtin.command: scontrol ping
+  register: controller_ping
+  retries: 3
+  delay: 10
+  until: controller_ping.rc == 0
+  changed_when: false
+
+- name: Check MUNGE authentication
+  ansible.builtin.command: munge -n
+  register: munge_check
+  changed_when: false
+  failed_when: munge_check.rc != 0
+
+- name: Verify shared filesystem mounts
+  ansible.builtin.shell: |
+    errors=0
+    for mount in {{ shared_mounts | default(['/home', '/data']) | join(' ') }}; do
+      if [ -d "$mount" ]; then
+        if ! mountpoint -q "$mount" 2>/dev/null; then
+          # Directory exists but not a mountpoint - might be local, check writability
+          if ! touch "$mount/.ansible_health_check" 2>/dev/null; then
+            echo "FAIL: Cannot write to $mount"
+            errors=$((errors + 1))
+          else
+            rm -f "$mount/.ansible_health_check"
+          fi
+        else
+          # Is a mountpoint, verify it's writable
+          if ! touch "$mount/.ansible_health_check" 2>/dev/null; then
+            echo "FAIL: Mountpoint $mount not writable"
+            errors=$((errors + 1))
+          else
+            rm -f "$mount/.ansible_health_check"
+          fi
+        fi
+      fi
+    done
+    exit $errors
+  register: mount_check
+  changed_when: false
+  failed_when: mount_check.rc != 0
+
+- name: Check available memory
+  ansible.builtin.shell: |
+    free_mem=$(free -m | awk '/^Mem:/ {print $7}')
+    total_mem=$(free -m | awk '/^Mem:/ {print $2}')
+    threshold={{ min_free_memory_mb | default(1024) }}
+    if [ "$free_mem" -lt "$threshold" ]; then
+      echo "FAIL: Only ${free_mem}MB free of ${total_mem}MB total (threshold: ${threshold}MB)"
+      exit 1
+    fi
+    echo "OK: ${free_mem}MB free of ${total_mem}MB total"
+  register: memory_check
+  changed_when: false
+  failed_when: memory_check.rc != 0
+
+- name: Check disk space on critical paths
+  ansible.builtin.shell: |
+    errors=0
+    for path in /tmp /var/log {{ additional_disk_paths | default([]) | join(' ') }}; do
+      if [ -d "$path" ]; then
+        usage=$(df -h "$path" | awk 'NR==2 {gsub(/%/,""); print $5}')
+        if [ "$usage" -gt {{ max_disk_usage_percent | default(90) }} ]; then
+          echo "FAIL: $path at ${usage}% usage"
+          errors=$((errors + 1))
+        fi
+      fi
+    done
+    exit $errors
+  register: disk_check
+  changed_when: false
+  failed_when: disk_check.rc != 0
+
+- name: Run GPU health check
+  ansible.builtin.shell: |
+    if command -v nvidia-smi &> /dev/null; then
+      nvidia-smi --query-gpu=gpu_name,memory.total,memory.free --format=csv,noheader
+      exit $?
+    fi
+    echo "No GPU detected"
+    exit 0
+  register: gpu_check
+  changed_when: false
+  when: check_gpu | default(false) | bool
+
+- name: Run custom validation scripts
+  ansible.builtin.script: "{{ item }}"
+  loop: "{{ custom_validation_scripts | default([]) }}"
+  register: custom_validation
+  changed_when: false
+  when: custom_validation_scripts is defined and custom_validation_scripts | length > 0
+
+- name: Set validation result fact
+  ansible.builtin.set_fact:
+    node_validation_passed: true
+    validation_results:
+      slurmd: "{{ slurmd_service.state | default('unknown') }}"
+      controller_comm: "{{ controller_ping.rc == 0 }}"
+      munge: "{{ munge_check.rc == 0 }}"
+      mounts: "{{ mount_check.rc == 0 }}"
+      memory: "{{ memory_check.rc == 0 }}"
+      disk: "{{ disk_check.rc == 0 }}"
+      gpu: "{{ gpu_check.rc | default(0) == 0 }}"

@@ -1,0 +1,24 @@
+---
+namespace: slurm
+name: node
+version: 1.0.0
+readme: README.md
+authors:
+  - Your Team <team@example.com>
+description: Ansible collection for managing Slurm compute nodes
+license:
+  - GPL-3.0-or-later
+license_file: ''
+tags:
+  - slurm
+  - hpc
+  - cluster
+  - maintenance
+  - scheduling
+dependencies: {}
+repository: https://github.com/yourorg/ansible-slurm-collection
+documentation: https://github.com/yourorg/ansible-slurm-collection
+homepage: https://github.com/yourorg/ansible-slurm-collection
+issues: https://github.com/yourorg/ansible-slurm-collection/issues
+build_ignore:
+  - '*.tar.gz'

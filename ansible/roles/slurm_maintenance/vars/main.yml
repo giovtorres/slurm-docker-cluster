@@ -1,0 +1,35 @@
+---
+# Default variables for slurm_maintenance role
+
+# Drain settings
+drain_timeout: 600              # Seconds to wait for jobs to complete
+drain_reason: "Scheduled maintenance"
+wait_for_drain: true
+
+# Patch settings
+patch_packages: "*"             # Packages to update (* = all)
+security_only: false            # Only apply security updates
+exclude_packages: []            # Packages to exclude from updates
+update_slurm: false             # Also update Slurm packages
+allow_reboot: true              # Allow reboot if kernel updated
+custom_patch_commands: []       # Additional commands to run
+
+# Validation settings
+require_validation: true        # Require validation before resume
+skip_validation: false          # Override validation (emergency only)
+min_free_memory_mb: 1024        # Minimum free memory in MB
+max_disk_usage_percent: 90      # Maximum disk usage percentage
+check_gpu: false                # Run GPU health checks
+shared_mounts:                  # Shared filesystems to verify
+  - /home
+  - /data
+additional_disk_paths: []       # Additional paths to check disk space
+custom_validation_scripts: []   # Custom validation scripts to run
+
+# Resume settings
+# (No additional settings currently)
+
+# Notification settings
+alert_webhook: ""               # Webhook URL for alerts (Slack, Teams, etc.)
+notify_on_success: false        # Send notification on success
+notify_on_failure: true         # Send notification on failure

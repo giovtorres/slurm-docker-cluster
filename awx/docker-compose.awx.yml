@@ -1,0 +1,181 @@
+---
+# AWX Docker Compose Setup
+#
+# Provides:
+# - AWX Web UI for scheduling and visibility
+# - PostgreSQL database
+# - Redis for caching/messaging
+# - AWX task workers
+#
+# Usage:
+#   docker compose -f docker-compose.awx.yml up -d
+#
+# Access:
+#   Web UI: http://localhost:8052
+#   Default credentials: admin / password (change immediately!)
+
+services:
+  # PostgreSQL Database
+  awx-postgres:
+    image: postgres:15-alpine
+    container_name: awx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: awx
+      POSTGRES_PASSWORD: ${AWX_DB_PASSWORD:-awxpass}
+      POSTGRES_DB: awx
+    volumes:
+      - awx_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U awx -d awx"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - awx-net
+
+  # Redis for task queue and caching
+  awx-redis:
+    image: redis:7-alpine
+    container_name: awx-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - awx_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - awx-net
+
+  # AWX Web Application
+  awx-web:
+    image: quay.io/ansible/awx:24.0.0
+    container_name: awx-web
+    hostname: awx-web
+    restart: unless-stopped
+    command: /usr/bin/launch_awx.sh
+    user: root
+    environment:
+      DATABASE_HOST: awx-postgres
+      DATABASE_NAME: awx
+      DATABASE_USER: awx
+      DATABASE_PASSWORD: ${AWX_DB_PASSWORD:-awxpass}
+      DATABASE_PORT: 5432
+      AWX_ADMIN_USER: ${AWX_ADMIN_USER:-admin}
+      AWX_ADMIN_PASSWORD: ${AWX_ADMIN_PASSWORD:-password}
+      AWX_ADMIN_EMAIL: ${AWX_ADMIN_EMAIL:-admin@example.com}
+      SECRET_KEY: ${AWX_SECRET_KEY:-awxsecret}
+      REDIS_HOST: awx-redis
+      REDIS_PORT: 6379
+    ports:
+      - "${AWX_WEB_PORT:-8052}:8052"
+    volumes:
+      - ./config/settings.py:/etc/tower/settings.py:ro
+      - ./config/credentials.py:/etc/tower/conf.d/credentials.py:ro
+      - ./projects:/var/lib/awx/projects:rw
+      - awx_job_output:/var/lib/awx/job_status
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      awx-postgres:
+        condition: service_healthy
+      awx-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8052/api/v2/ping/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - awx-net
+      - slurm-net
+
+  # AWX Task Worker
+  awx-task:
+    image: quay.io/ansible/awx:24.0.0
+    container_name: awx-task
+    hostname: awx-task
+    restart: unless-stopped
+    command: /usr/bin/launch_awx_task.sh
+    user: root
+    environment:
+      DATABASE_HOST: awx-postgres
+      DATABASE_NAME: awx
+      DATABASE_USER: awx
+      DATABASE_PASSWORD: ${AWX_DB_PASSWORD:-awxpass}
+      DATABASE_PORT: 5432
+      SECRET_KEY: ${AWX_SECRET_KEY:-awxsecret}
+      REDIS_HOST: awx-redis
+      REDIS_PORT: 6379
+      AWX_SKIP_MIGRATIONS: "1"
+      SUPERVISOR_CONFIG_PATH: /etc/supervisord_task.conf
+    volumes:
+      - ./config/settings.py:/etc/tower/settings.py:ro
+      - ./config/credentials.py:/etc/tower/conf.d/credentials.py:ro
+      - ./projects:/var/lib/awx/projects:rw
+      - awx_job_output:/var/lib/awx/job_status
+      # Mount SSH keys for node access
+      - ./credentials/ssh:/root/.ssh:ro
+      # Mount the ansible directory for local project access
+      - ../ansible:/var/lib/awx/projects/slurm-maintenance:ro
+    depends_on:
+      awx-web:
+        condition: service_healthy
+    networks:
+      - awx-net
+      - slurm-net
+
+  # Prometheus Pushgateway for maintenance metrics
+  pushgateway:
+    image: prom/pushgateway:v1.6.2
+    container_name: awx-pushgateway
+    restart: unless-stopped
+    ports:
+      - "${PUSHGATEWAY_PORT:-9091}:9091"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - awx-net
+      - slurm-net
+
+  # AWX Callback Receiver (webhook endpoint)
+  awx-receptor:
+    image: quay.io/ansible/awx:24.0.0
+    container_name: awx-receptor
+    hostname: awx-receptor
+    restart: unless-stopped
+    command: /usr/bin/receptor --config /etc/receptor/receptor.conf
+    user: root
+    volumes:
+      - ./config/receptor.conf:/etc/receptor/receptor.conf:ro
+      - awx_receptor_socket:/var/run/receptor
+    depends_on:
+      awx-web:
+        condition: service_healthy
+    networks:
+      - awx-net
+
+volumes:
+  awx_postgres_data:
+    name: awx_postgres_data
+  awx_redis_data:
+    name: awx_redis_data
+  awx_job_output:
+    name: awx_job_output
+  awx_receptor_socket:
+    name: awx_receptor_socket
+
+networks:
+  awx-net:
+    name: awx-net
+    driver: bridge
+  slurm-net:
+    name: slurm-docker-cluster_default
+    external: true

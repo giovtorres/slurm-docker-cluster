@@ -1,0 +1,48 @@
+---
+# Drain node tasks
+
+- name: Get current node state
+  ansible.builtin.command: sinfo -h -n {{ inventory_hostname }} -o "%T"
+  delegate_to: localhost
+  register: current_state
+  changed_when: false
+
+- name: Skip if already drained
+  ansible.builtin.debug:
+    msg: "Node {{ inventory_hostname }} already in state: {{ current_state.stdout }}"
+  when: "'drain' in current_state.stdout.lower()"
+
+- name: Drain the node
+  slurm.node.slurm_node_state:
+    name: "{{ inventory_hostname }}"
+    state: drain
+    reason: "{{ drain_reason | default('Maintenance via Ansible') }}"
+  delegate_to: localhost
+  when: "'drain' not in current_state.stdout.lower()"
+  register: drain_result
+
+- name: Wait for jobs to complete
+  ansible.builtin.shell: |
+    count=0
+    max_wait={{ drain_timeout | default(600) }}
+    while [ $count -lt $max_wait ]; do
+      running=$(squeue -h -w {{ inventory_hostname }} -t running | wc -l)
+      if [ "$running" -eq 0 ]; then
+        exit 0
+      fi
+      sleep 10
+      count=$((count + 10))
+      echo "Waiting... $running jobs still running"
+    done
+    exit 1
+  delegate_to: localhost
+  register: wait_result
+  changed_when: false
+  when: wait_for_drain | default(true) | bool
+
+- name: Verify drained state
+  ansible.builtin.command: sinfo -h -n {{ inventory_hostname }} -o "%T"
+  delegate_to: localhost
+  register: final_state
+  failed_when: "'drained' not in final_state.stdout.lower() and 'drain' not in final_state.stdout.lower()"
+  changed_when: false

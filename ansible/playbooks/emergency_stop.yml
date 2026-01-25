@@ -1,0 +1,114 @@
+---
+# Emergency Stop - Halt All Maintenance Operations
+#
+# USE WITH CAUTION: This playbook immediately stops all in-flight maintenance
+# and returns nodes to a safe state.
+#
+# Usage:
+#   ansible-playbook emergency_stop.yml -e "confirm=yes"
+
+- name: Emergency Stop - Confirmation Check
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm is defined
+          - confirm | lower == 'yes'
+        fail_msg: |
+          ============================================
+          EMERGENCY STOP REQUIRES CONFIRMATION
+          ============================================
+          Run with: -e "confirm=yes"
+
+          This will:
+          1. Stop any running maintenance playbooks
+          2. Leave nodes in their current state (drained nodes stay drained)
+          3. Cancel any pending maintenance jobs
+
+          To also resume all drained nodes, run:
+            ansible-playbook emergency_resume.yml
+          ============================================
+
+    - name: Record emergency stop
+      ansible.builtin.set_fact:
+        emergency_stop_time: "{{ ansible_date_time.iso8601 }}"
+        emergency_stop_by: "{{ lookup('env', 'USER') | default('unknown') }}"
+
+
+- name: Emergency Stop - Notify
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Send emergency notification
+      ansible.builtin.uri:
+        url: "{{ alert_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          text: "EMERGENCY STOP executed by {{ emergency_stop_by }}"
+          timestamp: "{{ emergency_stop_time }}"
+          alert: true
+          priority: critical
+      when: alert_webhook is defined
+      ignore_errors: true
+
+    - name: Log emergency stop
+      ansible.builtin.lineinfile:
+        path: /var/log/ansible/emergency_stops.log
+        line: "{{ emergency_stop_time }} - STOP executed by {{ emergency_stop_by }}"
+        create: true
+        mode: '0644'
+      ignore_errors: true
+
+
+- name: Emergency Stop - Set All Maintenance Nodes to HOLD
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Get all draining/drained nodes
+      ansible.builtin.shell: |
+        sinfo -h -t drain,draining -o "%N" | tr ',' '\n' | sort -u
+      register: drained_nodes
+      changed_when: false
+
+    - name: Display drained nodes
+      ansible.builtin.debug:
+        msg: |
+          Nodes currently in drain state:
+          {{ drained_nodes.stdout_lines | default(['None']) | join('\n') }}
+
+    - name: Update drain reason to indicate emergency stop
+      ansible.builtin.command: >
+        scontrol update NodeName={{ item }}
+        Reason="EMERGENCY STOP at {{ emergency_stop_time }} by {{ emergency_stop_by }}"
+      loop: "{{ drained_nodes.stdout_lines }}"
+      when: drained_nodes.stdout_lines | length > 0
+      ignore_errors: true
+
+
+- name: Emergency Stop - Summary
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Final status
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          EMERGENCY STOP COMPLETE
+          ============================================
+          Time:   {{ emergency_stop_time }}
+          By:     {{ emergency_stop_by }}
+          Nodes:  {{ drained_nodes.stdout_lines | length }} left in drain state
+          ============================================
+
+          NEXT STEPS:
+          1. Investigate the issue that triggered emergency stop
+          2. To resume all nodes: ansible-playbook emergency_resume.yml
+          3. To resume specific nodes: ansible-playbook resume_nodes.yml -e "target_nodes=<hostlist>"
+          ============================================

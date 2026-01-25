@@ -1,0 +1,161 @@
+---
+# Emergency Resume - Return All Drained Nodes to Service
+#
+# USE WITH CAUTION: This will resume ALL drained/draining nodes
+# regardless of their maintenance state.
+#
+# Usage:
+#   ansible-playbook emergency_resume.yml -e "confirm=yes"
+#
+# Options:
+#   skip_validation=true  - Skip health checks (emergency only)
+#   exclude_nodes=node1,node2 - Exclude specific nodes from resume
+
+- name: Emergency Resume - Confirmation Check
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm is defined
+          - confirm | lower == 'yes'
+        fail_msg: |
+          ============================================
+          EMERGENCY RESUME REQUIRES CONFIRMATION
+          ============================================
+          Run with: -e "confirm=yes"
+
+          This will:
+          1. Resume ALL drained/draining nodes
+          2. Skip validation by default (add skip_validation=false to validate)
+          3. Return cluster to full capacity immediately
+
+          WARNING: Only use this if you understand the implications!
+          Nodes may be returned to service in an unhealthy state.
+          ============================================
+
+
+- name: Emergency Resume - Gather Nodes
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Get all drained/draining nodes
+      ansible.builtin.shell: |
+        sinfo -h -t drain,draining,drained -o "%N" | tr ',' '\n' | sort -u
+      register: drained_nodes
+      changed_when: false
+
+    - name: Filter excluded nodes
+      ansible.builtin.set_fact:
+        nodes_to_resume: >-
+          {{ drained_nodes.stdout_lines |
+             difference(exclude_nodes.split(',') if exclude_nodes is defined else []) }}
+
+    - name: Display nodes to resume
+      ansible.builtin.debug:
+        msg: |
+          Nodes to resume: {{ nodes_to_resume | length }}
+          {{ nodes_to_resume | join('\n') }}
+
+
+- name: Emergency Resume - Execute
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    skip_validation: true  # Default to skip for emergency
+
+  tasks:
+    - name: Validate nodes if requested
+      when: not skip_validation | bool
+      block:
+        - name: Check slurmd on each node
+          ansible.builtin.command: ssh {{ item }} "systemctl is-active slurmd"
+          loop: "{{ nodes_to_resume }}"
+          register: slurmd_checks
+          ignore_errors: true
+
+        - name: Filter to healthy nodes only
+          ansible.builtin.set_fact:
+            healthy_nodes: >-
+              {{ slurmd_checks.results |
+                 selectattr('rc', 'equalto', 0) |
+                 map(attribute='item') | list }}
+            unhealthy_nodes: >-
+              {{ slurmd_checks.results |
+                 rejectattr('rc', 'equalto', 0) |
+                 map(attribute='item') | list }}
+
+        - name: Warn about unhealthy nodes
+          ansible.builtin.debug:
+            msg: |
+              WARNING: {{ unhealthy_nodes | length }} nodes failed validation:
+              {{ unhealthy_nodes | join('\n') }}
+              These nodes will NOT be resumed.
+          when: unhealthy_nodes | length > 0
+
+    - name: Set nodes to resume (with or without validation)
+      ansible.builtin.set_fact:
+        final_resume_list: "{{ healthy_nodes | default(nodes_to_resume) }}"
+
+    - name: Resume all nodes in batch
+      ansible.builtin.command: >
+        scontrol update NodeName={{ item }} State=RESUME
+      loop: "{{ final_resume_list }}"
+      register: resume_results
+      ignore_errors: true
+
+    - name: Collect results
+      ansible.builtin.set_fact:
+        resume_succeeded: "{{ resume_results.results | selectattr('rc', 'equalto', 0) | list | length }}"
+        resume_failed: "{{ resume_results.results | rejectattr('rc', 'equalto', 0) | list | length }}"
+
+
+- name: Emergency Resume - Verify and Report
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Wait for nodes to register
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Get final cluster state
+      ansible.builtin.shell: |
+        echo "=== Node State Summary ==="
+        sinfo -o "%T %D" | sort | uniq -c
+        echo ""
+        echo "=== Still Drained ==="
+        sinfo -h -t drain,draining,drained -o "%N %E" || echo "None"
+      register: final_state
+      changed_when: false
+
+    - name: Send notification
+      ansible.builtin.uri:
+        url: "{{ alert_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          text: "EMERGENCY RESUME: {{ resume_succeeded }} nodes resumed, {{ resume_failed }} failed"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          alert: true
+      when: alert_webhook is defined
+      ignore_errors: true
+
+    - name: Display final summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          EMERGENCY RESUME COMPLETE
+          ============================================
+          Attempted:  {{ final_resume_list | length }}
+          Succeeded:  {{ resume_succeeded }}
+          Failed:     {{ resume_failed }}
+          ============================================
+
+          {{ final_state.stdout }}
+
+          ============================================

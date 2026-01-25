@@ -1,0 +1,47 @@
+---
+# Resume node tasks
+
+- name: Ensure validation passed before resume
+  ansible.builtin.assert:
+    that:
+      - node_validation_passed | default(false) | bool or skip_validation | default(false) | bool
+    fail_msg: "Node validation failed. Set skip_validation=true to override (not recommended)."
+  when: require_validation | default(true) | bool
+
+- name: Resume the node
+  slurm.node.slurm_node_state:
+    name: "{{ inventory_hostname }}"
+    state: resume
+  delegate_to: localhost
+  register: resume_result
+
+- name: Wait for node to become available
+  ansible.builtin.shell: |
+    count=0
+    max_wait=120
+    while [ $count -lt $max_wait ]; do
+      state=$(sinfo -h -n {{ inventory_hostname }} -o "%T")
+      case "$state" in
+        *idle*|*mixed*|*alloc*)
+          echo "Node is now: $state"
+          exit 0
+          ;;
+      esac
+      sleep 5
+      count=$((count + 5))
+    done
+    echo "Timeout waiting for node to become available. Current state: $state"
+    exit 1
+  delegate_to: localhost
+  register: resume_wait
+  changed_when: false
+
+- name: Get final node state
+  ansible.builtin.command: sinfo -h -n {{ inventory_hostname }} -o "%T %E"
+  delegate_to: localhost
+  register: final_state
+  changed_when: false
+
+- name: Report resume result
+  ansible.builtin.debug:
+    msg: "Node {{ inventory_hostname }} resumed successfully. State: {{ final_state.stdout }}"

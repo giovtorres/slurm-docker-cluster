@@ -1,0 +1,267 @@
+---
+# Rolling Maintenance Playbook for Slurm Clusters
+#
+# Orchestrates rolling node maintenance with:
+# - Configurable batch sizes
+# - Drain → Patch → Validate → Resume flow
+# - Progress tracking via callbacks
+# - Safety checks and rollback capability
+#
+# Usage:
+#   ansible-playbook rolling_maintenance.yml \
+#     -i inventory/slurm_inventory.py \
+#     -e "target_nodes=partition_normal" \
+#     -e "maintenance_reason='Security patches - CVE-2024-XXXX'" \
+#     -e "batch_size=10"
+
+- name: Rolling Maintenance - Pre-flight Checks
+  hosts: localhost
+  gather_facts: false
+  vars:
+    min_cluster_capacity: 0.7  # Never drain below 70% capacity
+    max_queue_depth: 1000      # Pause if job queue exceeds this
+
+  tasks:
+    - name: Check cluster health
+      ansible.builtin.command: scontrol ping
+      register: cluster_health
+      changed_when: false
+      failed_when: "'UP' not in cluster_health.stdout"
+
+    - name: Get current cluster capacity
+      ansible.builtin.shell: |
+        total=$(sinfo -h -o "%D" | awk '{sum+=$1} END {print sum}')
+        available=$(sinfo -h -t idle,mixed,allocated -o "%D" | awk '{sum+=$1} END {print sum}')
+        echo "$available $total"
+      register: capacity_check
+      changed_when: false
+
+    - name: Parse capacity
+      ansible.builtin.set_fact:
+        available_nodes: "{{ capacity_check.stdout.split()[0] | int }}"
+        total_nodes: "{{ capacity_check.stdout.split()[1] | int }}"
+
+    - name: Calculate capacity ratio
+      ansible.builtin.set_fact:
+        capacity_ratio: "{{ (available_nodes | int) / (total_nodes | int) }}"
+      when: total_nodes | int > 0
+
+    - name: Fail if cluster capacity too low
+      ansible.builtin.fail:
+        msg: "Cluster capacity {{ (capacity_ratio | float * 100) | round(1) }}% is below minimum {{ (min_cluster_capacity * 100) | round(1) }}%"
+      when: capacity_ratio | float < min_cluster_capacity
+
+    - name: Check job queue depth
+      ansible.builtin.command: squeue -h -t pending | wc -l
+      register: queue_depth
+      changed_when: false
+
+    - name: Warn if queue depth high
+      ansible.builtin.debug:
+        msg: "WARNING: {{ queue_depth.stdout | int }} pending jobs in queue"
+      when: queue_depth.stdout | int > max_queue_depth / 2
+
+    - name: Fail if queue depth critical
+      ansible.builtin.fail:
+        msg: "Queue depth {{ queue_depth.stdout }} exceeds maximum {{ max_queue_depth }}"
+      when: queue_depth.stdout | int > max_queue_depth
+
+    - name: Record maintenance start
+      ansible.builtin.set_fact:
+        maintenance_start_time: "{{ ansible_date_time.iso8601 }}"
+        maintenance_id: "{{ ansible_date_time.epoch }}"
+      delegate_to: localhost
+      run_once: true
+
+
+- name: Rolling Maintenance - Execute
+  hosts: "{{ target_nodes | default('slurm_idle') }}"
+  gather_facts: true
+  serial: "{{ batch_size | default(5) }}"
+  max_fail_percentage: 10
+
+  vars:
+    maintenance_reason: "Scheduled maintenance"
+    drain_timeout: 600        # 10 minutes to drain
+    validation_retries: 3
+    patch_command: "yum update -y"  # Override as needed
+
+  tasks:
+    # =========================================
+    # PHASE 1: DRAIN NODE
+    # =========================================
+    - name: "DRAIN: Set node to draining state"
+      slurm.node.slurm_node_state:
+        name: "{{ inventory_hostname }}"
+        state: drain
+        reason: "{{ maintenance_reason }} [{{ maintenance_id | default('manual') }}]"
+      delegate_to: localhost
+      register: drain_result
+
+    - name: "DRAIN: Wait for running jobs to complete"
+      ansible.builtin.shell: |
+        timeout={{ drain_timeout }}
+        elapsed=0
+        while [ $elapsed -lt $timeout ]; do
+          jobs=$(squeue -h -w {{ inventory_hostname }} | wc -l)
+          if [ "$jobs" -eq 0 ]; then
+            echo "DRAINED"
+            exit 0
+          fi
+          echo "Waiting for $jobs jobs to complete..."
+          sleep 10
+          elapsed=$((elapsed + 10))
+        done
+        echo "TIMEOUT"
+        exit 1
+      delegate_to: localhost
+      register: drain_wait
+      changed_when: false
+
+    - name: "DRAIN: Verify node is fully drained"
+      ansible.builtin.command: sinfo -h -n {{ inventory_hostname }} -o "%T"
+      delegate_to: localhost
+      register: node_state
+      failed_when: "'drained' not in node_state.stdout.lower()"
+      changed_when: false
+
+    # =========================================
+    # PHASE 2: APPLY PATCHES
+    # =========================================
+    - name: "PATCH: Create pre-patch snapshot marker"
+      ansible.builtin.copy:
+        content: |
+          maintenance_id: {{ maintenance_id | default('manual') }}
+          timestamp: {{ ansible_date_time.iso8601 }}
+          hostname: {{ inventory_hostname }}
+        dest: /var/log/maintenance_prepatch.yml
+        mode: '0644'
+
+    - name: "PATCH: Update system packages"
+      ansible.builtin.shell: "{{ patch_command }}"
+      register: patch_result
+      retries: 2
+      delay: 30
+      until: patch_result.rc == 0
+      when: patch_command is defined and patch_command | length > 0
+
+    - name: "PATCH: Record patch results"
+      ansible.builtin.copy:
+        content: |
+          {{ patch_result.stdout | default('No output') }}
+        dest: /var/log/maintenance_patch_{{ maintenance_id | default('manual') }}.log
+        mode: '0644'
+      when: patch_result is defined
+
+    # =========================================
+    # PHASE 3: VALIDATE NODE
+    # =========================================
+    - name: "VALIDATE: Check slurmd is running"
+      ansible.builtin.service:
+        name: slurmd
+        state: started
+      register: slurmd_status
+
+    - name: "VALIDATE: Verify slurmd can communicate with controller"
+      ansible.builtin.command: scontrol ping
+      register: ping_result
+      retries: "{{ validation_retries }}"
+      delay: 10
+      until: ping_result.rc == 0
+      changed_when: false
+
+    - name: "VALIDATE: Check shared storage mounts"
+      ansible.builtin.shell: |
+        for mount in /home /scratch /data; do
+          if mountpoint -q $mount 2>/dev/null; then
+            touch $mount/.health_check_{{ inventory_hostname }} && \
+            rm -f $mount/.health_check_{{ inventory_hostname }}
+          fi
+        done
+      register: storage_check
+      changed_when: false
+      failed_when: storage_check.rc != 0
+
+    - name: "VALIDATE: Run custom health checks"
+      ansible.builtin.script: "{{ item }}"
+      loop: "{{ custom_health_checks | default([]) }}"
+      register: custom_checks
+      when: custom_health_checks is defined
+
+    # =========================================
+    # PHASE 4: RESUME NODE
+    # =========================================
+    - name: "RESUME: Return node to service"
+      slurm.node.slurm_node_state:
+        name: "{{ inventory_hostname }}"
+        state: resume
+      delegate_to: localhost
+      register: resume_result
+
+    - name: "RESUME: Verify node is available"
+      ansible.builtin.command: sinfo -h -n {{ inventory_hostname }} -o "%T"
+      delegate_to: localhost
+      register: final_state
+      retries: 6
+      delay: 10
+      until: "'idle' in final_state.stdout.lower() or 'alloc' in final_state.stdout.lower() or 'mix' in final_state.stdout.lower()"
+      changed_when: false
+
+    - name: "RESUME: Record successful maintenance"
+      ansible.builtin.copy:
+        content: |
+          maintenance_id: {{ maintenance_id | default('manual') }}
+          completed: {{ ansible_date_time.iso8601 }}
+          status: success
+          final_state: {{ final_state.stdout }}
+        dest: /var/log/maintenance_complete.yml
+        mode: '0644'
+
+  # Error handling
+  rescue:
+    - name: "ERROR: Record failure"
+      ansible.builtin.debug:
+        msg: "Maintenance failed on {{ inventory_hostname }}. Node left in drained state for investigation."
+
+    - name: "ERROR: Ensure node stays drained"
+      slurm.node.slurm_node_state:
+        name: "{{ inventory_hostname }}"
+        state: drain
+        reason: "MAINTENANCE FAILED - requires investigation [{{ maintenance_id | default('manual') }}]"
+      delegate_to: localhost
+      ignore_errors: true
+
+    - name: "ERROR: Send notification"
+      ansible.builtin.uri:
+        url: "{{ alert_webhook | default(omit) }}"
+        method: POST
+        body_format: json
+        body:
+          text: "Maintenance FAILED on {{ inventory_hostname }}"
+          maintenance_id: "{{ maintenance_id | default('manual') }}"
+      when: alert_webhook is defined
+      ignore_errors: true
+
+
+- name: Rolling Maintenance - Summary Report
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Generate maintenance report
+      ansible.builtin.template:
+        src: maintenance_report.j2
+        dest: "/var/log/maintenance_report_{{ maintenance_id | default('manual') }}.json"
+        mode: '0644'
+      when: maintenance_id is defined
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          MAINTENANCE COMPLETE
+          ==========================================
+          Maintenance ID: {{ maintenance_id | default('manual') }}
+          Target Group:   {{ target_nodes | default('slurm_idle') }}
+          Batch Size:     {{ batch_size | default(5) }}
+          ==========================================

@@ -1,5 +1,6 @@
 .PHONY: help build up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version \
-	playground-init playground-start playground-stop playground-reset playground-shell playground-logs playground-metrics playground-scale playground-workload
+	playground-init playground-start playground-stop playground-reset playground-shell playground-logs playground-metrics playground-scale playground-workload \
+	awx-up awx-down awx-setup awx-status awx-logs awx-clean
 
 # Default target
 .DEFAULT_GOAL := help
@@ -56,6 +57,14 @@ help:  ## Show this help message
 	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-logs" "Tail playground logs"
 	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-metrics" "Open Grafana dashboard"
 	@printf "  ${CYAN}%-18s${RESET} %s\n" "playground-status" "Show playground status"
+	@echo ""
+	@echo "AWX (Maintenance Automation):"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "awx-setup" "Full AWX setup (first time)"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "awx-up" "Start AWX services"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "awx-down" "Stop AWX services"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "awx-status" "Show AWX status and credentials"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "awx-logs" "Tail AWX logs"
+	@printf "  ${CYAN}%-18s${RESET} %s\n" "awx-clean" "Remove AWX and all data"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make update-slurm FILES=\"slurm.conf slurmdbd.conf\""
@@ -310,3 +319,31 @@ playground-scale:  ## Scale cluster (use NODES=N)
 playground-workload:  ## Submit sample workload (use TYPE=cpu|memory|sleep COUNT=N)
 	@echo "Submitting workload..."
 	@playground workload $(or $(TYPE),sleep) --count=$(or $(COUNT),5)
+
+# =============================================================================
+# AWX Targets (Maintenance Automation)
+# =============================================================================
+
+awx-setup:  ## Full AWX setup - generates credentials, starts services, configures resources
+	@echo "Setting up AWX for Slurm maintenance automation..."
+	@cd awx && ./setup_awx.sh
+
+awx-up:  ## Start AWX services
+	@echo "Starting AWX services..."
+	@cd awx && ./setup_awx.sh --start
+
+awx-down:  ## Stop AWX services
+	@echo "Stopping AWX services..."
+	@cd awx && docker compose -f docker-compose.awx.yml down
+
+awx-status:  ## Show AWX status and access credentials
+	@cd awx && ./setup_awx.sh --status
+
+awx-logs:  ## Tail AWX logs
+	@cd awx && docker compose -f docker-compose.awx.yml logs -f
+
+awx-clean:  ## Remove AWX containers, volumes, and credentials (DESTRUCTIVE!)
+	@echo "WARNING: This will delete all AWX data including job history!"
+	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@cd awx && ./setup_awx.sh --clean
+	@echo "✓ AWX cleaned"

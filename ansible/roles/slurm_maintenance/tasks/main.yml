@@ -1,0 +1,36 @@
+---
+# Slurm Maintenance Role - Main Tasks
+#
+# Provides reusable tasks for node maintenance operations.
+# Include this role in playbooks for consistent maintenance procedures.
+
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family | lower }}.yml"
+  ignore_errors: true
+
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - maintenance_action is defined
+      - maintenance_action in ['drain', 'patch', 'validate', 'resume', 'full']
+    fail_msg: "maintenance_action must be one of: drain, patch, validate, resume, full"
+
+# Drain tasks
+- name: Include drain tasks
+  ansible.builtin.include_tasks: drain.yml
+  when: maintenance_action in ['drain', 'full']
+
+# Patch tasks
+- name: Include patch tasks
+  ansible.builtin.include_tasks: patch.yml
+  when: maintenance_action in ['patch', 'full']
+
+# Validate tasks
+- name: Include validate tasks
+  ansible.builtin.include_tasks: validate.yml
+  when: maintenance_action in ['validate', 'full']
+
+# Resume tasks
+- name: Include resume tasks
+  ansible.builtin.include_tasks: resume.yml
+  when: maintenance_action in ['resume', 'full']

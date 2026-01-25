@@ -1,0 +1,123 @@
+---
+# Patch application tasks
+
+- name: Create pre-patch marker
+  ansible.builtin.copy:
+    content: |
+      ---
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ inventory_hostname }}"
+      kernel_before: "{{ ansible_kernel }}"
+      maintenance_id: "{{ maintenance_id | default('unknown') }}"
+    dest: /var/log/slurm_maintenance/prepatch_{{ ansible_date_time.epoch }}.yml
+    mode: '0644'
+  register: prepatch_marker
+
+- name: Ensure maintenance log directory exists
+  ansible.builtin.file:
+    path: /var/log/slurm_maintenance
+    state: directory
+    mode: '0755'
+
+# RedHat/CentOS patching
+- name: Update packages (RedHat)
+  ansible.builtin.yum:
+    name: "{{ patch_packages | default('*') }}"
+    state: latest
+    security: "{{ security_only | default(false) | bool }}"
+    exclude: "{{ exclude_packages | default([]) | join(',') }}"
+  register: yum_result
+  when: ansible_os_family == "RedHat"
+  retries: 3
+  delay: 30
+  until: yum_result is succeeded
+
+# Debian/Ubuntu patching
+- name: Update apt cache (Debian)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Update packages (Debian)
+  ansible.builtin.apt:
+    name: "{{ patch_packages | default('*') }}"
+    state: latest
+    only_upgrade: true
+  register: apt_result
+  when: ansible_os_family == "Debian"
+  retries: 3
+  delay: 30
+  until: apt_result is succeeded
+
+# Custom patch commands
+- name: Run custom patch commands
+  ansible.builtin.shell: "{{ item }}"
+  loop: "{{ custom_patch_commands | default([]) }}"
+  register: custom_patch_result
+  when: custom_patch_commands is defined and custom_patch_commands | length > 0
+
+# Slurm-specific updates
+- name: Update Slurm packages if specified
+  ansible.builtin.package:
+    name: "{{ slurm_packages | default(['slurm', 'slurm-slurmd']) }}"
+    state: latest
+  when: update_slurm | default(false) | bool
+  register: slurm_update
+
+- name: Restart slurmd if Slurm was updated
+  ansible.builtin.service:
+    name: slurmd
+    state: restarted
+  when: slurm_update is changed
+
+# Handle kernel updates requiring reboot
+- name: Check if reboot is required (RedHat)
+  ansible.builtin.command: needs-restarting -r
+  register: reboot_required_rh
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == "RedHat"
+
+- name: Check if reboot is required (Debian)
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required_deb
+  when: ansible_os_family == "Debian"
+
+- name: Set reboot required fact
+  ansible.builtin.set_fact:
+    reboot_needed: "{{ (reboot_required_rh.rc | default(0) == 1) or (reboot_required_deb.stat.exists | default(false)) }}"
+
+- name: Reboot if required
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+    pre_reboot_delay: 5
+    post_reboot_delay: 30
+    msg: "Ansible maintenance reboot"
+  when:
+    - reboot_needed | default(false) | bool
+    - allow_reboot | default(true) | bool
+
+- name: Wait for system to come back
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: 300
+  when:
+    - reboot_needed | default(false) | bool
+    - allow_reboot | default(true) | bool
+
+- name: Create post-patch marker
+  ansible.builtin.copy:
+    content: |
+      ---
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ inventory_hostname }}"
+      kernel_after: "{{ ansible_kernel }}"
+      maintenance_id: "{{ maintenance_id | default('unknown') }}"
+      reboot_performed: {{ reboot_needed | default(false) }}
+      packages_updated:
+        redhat: {{ yum_result.results | default([]) | length }}
+        debian: {{ apt_result.stdout_lines | default([]) | length }}
+    dest: /var/log/slurm_maintenance/postpatch_{{ ansible_date_time.epoch }}.yml
+    mode: '0644'
