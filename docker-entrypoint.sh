@@ -2,6 +2,19 @@
 set -e
 
 echo "---> Starting the MUNGE Authentication service (munged) ..."
+
+# Create munge runtime directory (required for socket)
+mkdir -p /run/munge
+chown munge:munge /run/munge
+chmod 0755 /run/munge
+
+# Ensure munge key has correct ownership and permissions
+# This is needed because the key may be on a persistent volume
+if [ -f /etc/munge/munge.key ]; then
+    chown munge:munge /etc/munge/munge.key
+    chmod 0400 /etc/munge/munge.key
+fi
+
 gosu munge /usr/sbin/munged
 
 if [ "$1" = "slurmdbd" ]
