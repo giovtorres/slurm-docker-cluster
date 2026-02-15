@@ -7,20 +7,35 @@ ARG SLURM_VERSION
 # ============================================================================
 # Stage 1: Build RPMs
 # ============================================================================
-FROM rockylinux/rockylinux:9 AS builder
+FROM rockylinux/rockylinux:10 AS builder
 
 ARG SLURM_VERSION
 ARG TARGETARCH
 
 # Enable CRB and EPEL repositories for development packages
 # Install RPM build tools and dependencies
+# (Temporarily adding http-parser packages from EL9. Waiting for this issue: https://support.schedmd.com/show_bug.cgi?id=21801)
 RUN set -ex \
-    && dnf makecache \
-    && dnf -y update \
-    && dnf -y install dnf-plugins-core epel-release \
+    && RPM_ARCH=$(case "${TARGETARCH}" in \
+         amd64) echo "x86_64" ;; \
+         arm64) echo "aarch64" ;; \
+         *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+       esac) \
+    && echo "Setting up build environment for architecture: ${RPM_ARCH}" \
+    && dnf makecache --setopt=retries=5 \
+    && dnf -y install --setopt=retries=5 dnf-plugins-core epel-release wget \
     && dnf config-manager --set-enabled crb \
-    && dnf makecache \
-    && dnf -y install \
+    && dnf makecache --setopt=retries=5 \
+    && mkdir -p /tmp/http-parser-rpms \
+    && wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 --tries=5 \
+       -O /tmp/http-parser-rpms/http-parser.rpm \
+       https://download.rockylinux.org/pub/rocky/9/AppStream/${RPM_ARCH}/os/Packages/h/http-parser-2.9.4-6.el9.${RPM_ARCH}.rpm \
+    && wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 --tries=5 \
+       -O /tmp/http-parser-rpms/http-parser-devel.rpm \
+       https://download.rockylinux.org/pub/rocky/9/CRB/${RPM_ARCH}/os/Packages/h/http-parser-devel-2.9.4-6.el9.${RPM_ARCH}.rpm \
+    && dnf -y install --setopt=retries=5 /tmp/http-parser-rpms/*.rpm \
+    && rm -rf /tmp/http-parser-rpms \
+    && dnf -y install --setopt=retries=5 \
        autoconf \
        automake \
        bzip2 \
@@ -31,7 +46,6 @@ RUN set -ex \
        git \
        gtk2-devel \
        hdf5-devel \
-       http-parser-devel \
        hwloc-devel \
        json-c-devel \
        libcurl-devel \
@@ -54,7 +68,6 @@ RUN set -ex \
        rpm-build \
        rpmdevtools \
        rrdtool-devel \
-       wget \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -82,11 +95,11 @@ RUN set -ex \
 # ============================================================================
 # Stage 2: Runtime image
 # ============================================================================
-FROM rockylinux/rockylinux:9
+FROM rockylinux/rockylinux:10
 
 LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docker-cluster" \
       org.opencontainers.image.title="slurm-docker-cluster" \
-      org.opencontainers.image.description="Slurm Docker cluster on Rocky Linux 9" \
+      org.opencontainers.image.description="Slurm Docker cluster on Rocky Linux 10" \
       maintainer="Giovanni Torres"
 
 ARG SLURM_VERSION
@@ -94,20 +107,31 @@ ARG TARGETARCH
 
 # Enable CRB and EPEL repositories for runtime dependencies
 RUN set -ex \
-    && dnf makecache \
-    && dnf -y update \
-    && dnf -y install dnf-plugins-core epel-release \
+    && dnf makecache --setopt=retries=5 \
+    && dnf -y update --setopt=retries=5 \
+    && dnf -y install --setopt=retries=5 dnf-plugins-core epel-release wget \
     && dnf config-manager --set-enabled crb \
-    && dnf makecache
+    && dnf makecache --setopt=retries=5
 
 # Install runtime dependencies only
 RUN set -ex \
-    && dnf -y install \
+    && RPM_ARCH=$(case "${TARGETARCH}" in \
+         amd64) echo "x86_64" ;; \
+         arm64) echo "aarch64" ;; \
+         *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+       esac) \
+    && echo "Installing runtime dependencies for architecture: ${RPM_ARCH}" \
+    && mkdir -p /tmp/http-parser-rpms \
+    && wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 --tries=5 \
+       -O /tmp/http-parser-rpms/http-parser.rpm \
+       https://download.rockylinux.org/pub/rocky/9/AppStream/${RPM_ARCH}/os/Packages/h/http-parser-2.9.4-6.el9.${RPM_ARCH}.rpm \
+    && dnf -y install --setopt=retries=5 /tmp/http-parser-rpms/http-parser.rpm \
+    && rm -rf /tmp/http-parser-rpms \
+    && dnf -y install --setopt=retries=5 \
        bash-completion \
        bzip2 \
        gettext \
        hdf5 \
-       http-parser \
        hwloc \
        json-c \
        jq \
@@ -124,7 +148,6 @@ RUN set -ex \
        python3 \
        readline \
        vim-enhanced \
-       wget \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -173,7 +196,9 @@ RUN set -x \
 # Fix /etc permissions and create munge key
 RUN set -x \
     && chmod 0755 /etc \
-    && /sbin/create-munge-key
+    && /sbin/mungekey --create \
+    && chown munge:munge /etc/munge/munge.key \
+    && chmod 0400 /etc/munge/munge.key
 
 # Create slurm dirs with correct ownership
 RUN set -x \
