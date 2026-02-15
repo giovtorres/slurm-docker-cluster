@@ -21,8 +21,8 @@ RUN set -ex \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
-    && dnf -y install https://download.rockylinux.org/pub/rocky/9/AppStream/x86_64/os/Packages/h/http-parser-2.9.4-6.el9.x86_64.rpm \
-    && dnf -y install https://download.rockylinux.org/pub/rocky/9/CRB/x86_64/os/Packages/h/http-parser-devel-2.9.4-6.el9.x86_64.rpm \
+    && dnf -y install https://download.rockylinux.org/pub/rocky/9/AppStream/${TARGETARCH}/os/Packages/h/http-parser-2.9.4-6.el9.${TARGETARCH}.rpm \
+    && dnf -y install https://download.rockylinux.org/pub/rocky/9/CRB/${TARGETARCH}/os/Packages/h/http-parser-devel-2.9.4-6.el9.${TARGETARCH}}.rpm \
     && dnf -y install \
        autoconf \
        automake \
@@ -104,7 +104,7 @@ RUN set -ex \
 
 # Install runtime dependencies only
 RUN set -ex \
-    && dnf -y install https://download.rockylinux.org/pub/rocky/9/AppStream/x86_64/os/Packages/h/http-parser-2.9.4-6.el9.x86_64.rpm \
+    && dnf -y install https://download.rockylinux.org/pub/rocky/9/AppStream/${TARGETARCH}/os/Packages/h/http-parser-2.9.4-6.el9.${TARGETARCH}.rpm \
     && dnf -y install \
        bash-completion \
        bzip2 \
