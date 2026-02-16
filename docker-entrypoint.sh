@@ -37,6 +37,26 @@ then
     done
     echo "-- slurmdbd is now active ..."
 
+    # Configure Elasticsearch for job completion if ELASTICSEARCH_HOST is set
+    if [ -n "${ELASTICSEARCH_HOST}" ]; then
+        echo "---> Configuring Elasticsearch job completion logging..."
+        echo "---> Elasticsearch host: ${ELASTICSEARCH_HOST}"
+
+        # Wait for Elasticsearch to be available
+        until curl -s "${ELASTICSEARCH_HOST}/_cluster/health" >/dev/null 2>&1; do
+            echo "-- Elasticsearch is not available. Sleeping ..."
+            sleep 2
+        done
+        echo "-- Elasticsearch is now active ..."
+
+        # Update slurm.conf to use Elasticsearch for job completion
+        # Format: http://host:port/index/_doc (ES 8.x+ typeless mode)
+        sed -i "s|^JobCompType=.*|JobCompType=jobcomp/elasticsearch|" /etc/slurm/slurm.conf
+        sed -i "s|^JobCompLoc=.*|JobCompLoc=${ELASTICSEARCH_HOST}/slurm/_doc|" /etc/slurm/slurm.conf
+
+        echo "---> Job completion configured for Elasticsearch"
+    fi
+
     echo "---> Starting the Slurm Controller Daemon (slurmctld) ..."
     exec gosu slurm /usr/sbin/slurmctld -i -Dvvv
 fi

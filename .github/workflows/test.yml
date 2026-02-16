@@ -16,6 +16,7 @@ jobs:
       matrix:
         slurm_version: ['25.05.3', '24.11.6']
         runner: ['ubuntu-latest', 'ubuntu-24.04-arm']
+        monitoring: ['disabled', 'enabled']
         include:
           - runner: ubuntu-latest
             arch: amd64
@@ -26,12 +27,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build and start cluster for Slurm ${{ matrix.slurm_version }} (${{ matrix.arch }})
+      - name: Configure cluster - Slurm ${{ matrix.slurm_version }} (${{ matrix.arch }}) - Monitoring ${{ matrix.monitoring }}
         run: |
           echo "SLURM_VERSION=${{ matrix.slurm_version }}" > .env
+          if [ "${{ matrix.monitoring }}" == "enabled" ]; then
+            echo "ELASTICSEARCH_HOST=http://elasticsearch:9200" >> .env
+            echo "✓ Monitoring ENABLED"
+          else
+            echo "✓ Monitoring DISABLED"
+          fi
           cat .env
-          docker compose build
-          docker compose up -d
+
+      - name: Build cluster
+        run: make build
+
+      - name: Start cluster
+        run: |
+          make up
           echo "Waiting for services to start..."
           sleep 15
 
@@ -77,47 +89,47 @@ jobs:
           echo "Waiting for cluster to auto-register with slurmdbd..."
           sleep 10
 
+      - name: Wait for Elasticsearch to be healthy
+        if: matrix.monitoring == 'enabled'
+        run: |
+          timeout 90 bash -c 'until docker compose ps elasticsearch | grep -q "healthy"; do
+            echo "Waiting for Elasticsearch..."
+            sleep 2
+          done'
+          echo "Elasticsearch is healthy"
+
+      - name: Wait for Kibana to be healthy
+        if: matrix.monitoring == 'enabled'
+        run: |
+          timeout 120 bash -c 'until docker compose ps kibana | grep -q "healthy"; do
+            echo "Waiting for Kibana..."
+            sleep 2
+          done'
+          echo "Kibana is healthy"
+
       - name: Show cluster status
-        run: |
-          echo "=== Container Status ==="
-          docker compose ps
-          echo ""
-          echo "=== Slurm Info ==="
-          docker exec slurmctld sinfo
-          echo ""
-          echo "=== Node Details ==="
-          docker exec slurmctld scontrol show nodes
+        run: make status
 
-      - name: Test REST API
+      - name: Show monitoring status
+        if: matrix.monitoring == 'enabled'
         run: |
-          echo "=== Testing REST API via Unix Socket ==="
-          # Auto-detect REST API version based on Slurm version
-          if [ "${{ matrix.slurm_version }}" == "24.11.6" ]; then
-            API_VERSION="v0.0.41"
-          else
-            API_VERSION="v0.0.42"
-          fi
-          echo "Using REST API version: $API_VERSION"
-
-          docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-            http://localhost/slurm/${API_VERSION}/ping
+          echo "=== Elasticsearch Health ==="
+          docker exec elasticsearch curl -s "http://localhost:9200/_cluster/health?pretty"
           echo ""
-          echo "=== REST API Jobs Query ==="
-          docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-            http://localhost/slurm/${API_VERSION}/jobs | head -20
+          echo "=== Kibana Status ==="
+          docker exec kibana curl -s "http://localhost:5601/api/status" | head -20
 
       - name: Run test suite
-        run: chmod +x test_cluster.sh && ./test_cluster.sh
+        run: make test
+
+      - name: Run monitoring test suite
+        if: matrix.monitoring == 'enabled'
+        run: make test-monitoring
 
       - name: Show logs on failure
         if: failure()
-        run: |
-          echo "=== Docker Compose Logs ==="
-          docker compose logs
-          echo ""
-          echo "=== Container Status ==="
-          docker compose ps
+        run: make logs
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: make clean
