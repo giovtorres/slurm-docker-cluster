@@ -45,6 +45,8 @@ make up
 - **slurmctld** - Controller for job scheduling
 - **slurmrestd** - REST API daemon (HTTP/JSON access)
 - **c1, c2** - Compute nodes
+- **elasticsearch** - (optional) indexing jobs
+- **kibana** - (optional) visualization for elasticsearch
 
 **Persistent volumes:**
 
@@ -151,8 +153,8 @@ make rebuild
 ```bash
 # Cross-platform build (uses QEMU emulation)
 docker buildx build --platform linux/arm64 \
-  --build-arg SLURM_VERSION=25.05.3 \
-  --load -t slurm-docker-cluster:25.05.3 .
+  --build-arg SLURM_VERSION=25.05.6 \
+  --load -t slurm-docker-cluster:25.05.6 .
 ```
 
 ## 📚 Documentation
