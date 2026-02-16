@@ -13,7 +13,7 @@ usage.
 git clone https://github.com/giovtorres/slurm-docker-cluster.git
 cd slurm-docker-cluster
 
-# Start with defaults (Slurm 25.05.x with no-monitoring)
+# Start with defaults (Slurm 25.11.x, no monitoring)
 make up
 
 # Verify cluster is working
@@ -32,7 +32,7 @@ cp .env.example .env
 make up
 ```
 
-**Supported Slurm versions:** 25.05.x, 24.11.x
+**Supported Slurm versions:** 25.11.x, 25.05.x, 24.11.x
 
 **Supported architectures (auto-detected):** AMD64, ARM64
 
@@ -76,7 +76,7 @@ make run-examples
 
 ### REST API
 
-Query cluster via REST API (version auto-detected: v0.0.42 for 25.05.x, v0.0.41 for 24.11.x):
+Query cluster via REST API (version auto-detected: v0.0.44 for 25.11.x, v0.0.42 for 25.05.x, v0.0.41 for 24.11.x):
 
 ```bash
 # Get nodes

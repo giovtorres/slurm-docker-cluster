@@ -354,9 +354,12 @@ get_api_version() {
         "25.05")
             echo "v0.0.42"
             ;;
+        "25.11")
+            echo "v0.0.44"
+            ;;
         *)
             # Default to latest
-            echo "v0.0.42"
+            echo "v0.0.44"
             ;;
     esac
 }
