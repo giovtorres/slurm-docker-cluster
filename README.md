@@ -23,7 +23,7 @@ git clone https://github.com/giovtorres/slurm-docker-cluster.git
 cd slurm-docker-cluster
 ```
 
-## 🔢 Choosing Your Slurm Version
+### 🔢 Choosing Your Slurm Version
 
 This project supports multiple Slurm versions. To select your version, copy `.env.example` to `.env` and set `SLURM_VERSION`:
 
@@ -37,33 +37,27 @@ SLURM_VERSION=24.11.6   # Previous stable release
 
 **Supported versions:** 25.05.x, 24.11.x
 
-## 🏗️ Architecture Support
+### 🏗️ Architecture Support
 
 This project supports both **AMD64 (x86_64)** and **ARM64 (aarch64)**
 architectures. The build system automatically detects your architecture. No
-special configuration is needed - simply build and run:
+special configuration is needed - simply build and run.
+
+## Build and start the cluster
 
 ```bash
 make build
 make up
 ```
 
-## 🚀 Quick Start (Using Make)
-
-The easiest way to get started is using the provided Makefile:
+### View cluster status
 
 ```bash
-# Build and start the cluster
-make up
-
-# Run tests to verify everything works
-make test
-
-# View cluster status
 make status
 ```
 
 See all available commands:
+
 ```bash
 make help
 ```
