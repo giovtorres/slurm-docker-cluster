@@ -326,6 +326,20 @@ test_singularity_multi_node_job() {
     fi
 }
 
+test_python_version() {
+    print_test "Testing Python version..."
+
+    # Check Python 3.12 is installed and default
+    PYTHON_VERSION=$(docker exec slurmctld python3 --version 2>&1 | awk '{print $2}')
+
+    if echo "$PYTHON_VERSION" | grep -q "^3\.12\."; then
+        print_pass "Python 3.12 is the default version ($PYTHON_VERSION)"
+    else
+        print_fail "Python version is not 3.12.x (found: $PYTHON_VERSION)"
+        return 1
+    fi
+}
+
 # Main test execution
 main() {
     # Read Slurm version from .env file
@@ -357,6 +371,7 @@ main() {
     test_job_accounting || true
     test_multi_node_job || true
     test_resource_limits || true
+    test_python_version || true
     test_singularity_pull_image || true
     test_singularity_multi_node_job || true
 

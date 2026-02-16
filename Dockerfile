@@ -48,8 +48,8 @@ RUN set -ex \
        openssl-devel \
        pam-devel \
        perl \
-       python3 \
-       python3-devel \
+       python3.12 \
+       python3.12-devel \
        readline-devel \
        rpm-build \
        rpmdevtools \
@@ -121,12 +121,14 @@ RUN set -ex \
        perl \
        procps-ng \
        psmisc \
-       python3 \
+       python3.12 \
        readline \
        vim-enhanced \
        wget \
     && dnf clean all \
-    && rm -rf /var/cache/dnf
+    && rm -rf /var/cache/dnf \
+    && alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && alternatives --set python3 /usr/bin/python3.12
 
 # Install gosu for privilege dropping
 ARG GOSU_VERSION=1.19
