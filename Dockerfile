@@ -16,7 +16,6 @@ ARG TARGETARCH
 # Install RPM build tools and dependencies
 RUN set -ex \
     && dnf makecache \
-    && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
