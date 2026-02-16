@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 
 # Supported Slurm versions
-SUPPORTED_VERSIONS := 24.11.6 25.05.3
+SUPPORTED_VERSIONS := 24.11.7 25.05.6
 # Read default version from .env.example (source of truth)
 DEFAULT_VERSION := $(shell grep '^SLURM_VERSION=' .env.example | cut -d= -f2)
 
@@ -56,8 +56,8 @@ help:  ## Show this help message
 	@echo ""
 	@echo "Examples:"
 	@echo "  make update-slurm FILES=\"slurm.conf slurmdbd.conf\""
-	@echo "  make set-version VER=24.11.6"
-	@echo "  make test-version VER=24.11.6"
+	@echo "  make set-version VER=24.11.7"
+	@echo "  make test-version VER=24.11.7"
 	@echo ""
 	@echo "Monitoring:"
 	@echo "  Enable:  Set ELASTICSEARCH_HOST=http://elasticsearch:9200 in .env"

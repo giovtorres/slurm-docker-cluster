@@ -344,7 +344,7 @@ test_python_version() {
 get_api_version() {
     local slurm_version="$1"
 
-    # Extract major.minor version (e.g., "25.05" from "25.05.3")
+    # Extract major.minor version (e.g., "25.05" from "25.05.x")
     local major_minor=$(echo "$slurm_version" | cut -d. -f1,2)
 
     case "$major_minor" in

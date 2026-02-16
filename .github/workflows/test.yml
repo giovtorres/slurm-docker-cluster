@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false  # Allow all matrix jobs to complete independently
       matrix:
-        slurm_version: ['25.05.3', '24.11.6']
+        slurm_version: ['25.05.6', '24.11.7']
         runner: ['ubuntu-latest', 'ubuntu-24.04-arm']
         monitoring: ['disabled', 'enabled']
         include:

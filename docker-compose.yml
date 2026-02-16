@@ -20,13 +20,13 @@ services:
       start_period: 30s
 
   slurmdbd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.6}
     build:
       context: .
       args:
-        SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
+        SLURM_VERSION: ${SLURM_VERSION:-25.05.6}
       cache_from:
-        - slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+        - slurm-docker-cluster:${SLURM_VERSION:-25.05.6}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
@@ -52,7 +52,7 @@ services:
       start_period: 20s
 
   slurmctld:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.6}
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
@@ -80,7 +80,7 @@ services:
       start_period: 20s
 
   slurmrestd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.6}
     command: ["slurmrestd"]
     container_name: slurmrestd
     hostname: slurmrestd
@@ -106,7 +106,7 @@ services:
       start_period: 20s
 
   c1:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.6}
     command: ["slurmd"]
     container_name: c1
     hostname: c1
@@ -132,7 +132,7 @@ services:
       start_period: 20s
 
   c2:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.6}
     command: ["slurmd"]
     container_name: c2
     hostname: c2
