@@ -16,7 +16,6 @@ ARG TARGETARCH
 # Install RPM build tools and dependencies
 RUN set -ex \
     && dnf makecache \
-    && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
@@ -92,17 +91,14 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
 ARG SLURM_VERSION
 ARG TARGETARCH
 
-# Enable CRB and EPEL repositories for runtime dependencies
+# Enable CRB and EPEL repositories, then install runtime dependencies
 RUN set -ex \
-    && dnf makecache \
     && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
-    && dnf makecache
-
-# Install runtime dependencies only
-RUN set -ex \
+    && dnf makecache \
     && dnf -y install \
+       apptainer \
        bash-completion \
        bzip2 \
        gettext \
@@ -132,16 +128,21 @@ RUN set -ex \
 
 # Install gosu for privilege dropping
 ARG GOSU_VERSION=1.19
+# Official SHA256 checksums from https://github.com/tianon/gosu/releases/download/1.19/SHA256SUMS
+ARG GOSU_SHA256_AMD64=52c8749d0142edd234e9d6bd5237dff2d81e71f43537e2f4f66f75dd4b243dd0
+ARG GOSU_SHA256_ARM64=3a8ef022d82c0bc4a98bcb144e77da714c25fcfa64dccc57f6aba7ae47ff1a44
 
 RUN set -ex \
-    && echo "Installing gosu for architecture: ${TARGETARCH}" \
-    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-${TARGETARCH}" \
-    && wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-${TARGETARCH}.asc" \
-    && export GNUPGHOME="$(mktemp -d)" \
-    && gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
-    && gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
-    && rm -rf "${GNUPGHOME}" /usr/local/bin/gosu.asc \
+    && echo "Installing gosu ${GOSU_VERSION} for architecture: ${TARGETARCH}" \
+    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-${TARGETARCH}" \
+    && EXPECTED_SHA256=$(case "${TARGETARCH}" in \
+         amd64) echo "${GOSU_SHA256_AMD64}" ;; \
+         arm64) echo "${GOSU_SHA256_ARM64}" ;; \
+         *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+       esac) \
+    && echo "${EXPECTED_SHA256}  /usr/local/bin/gosu" | sha256sum -c - \
     && chmod +x /usr/local/bin/gosu \
+    && gosu --version \
     && gosu nobody true
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
@@ -158,27 +159,14 @@ RUN set -ex \
     && rm -rf /tmp/rpms \
     && dnf clean all
 
-# Install Singularity
-RUN set -ex \
-    && dnf -y install \
-       apptainer \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
-
-# Create slurm user and group
+# Create users, generate munge key, and set up directories
 RUN set -x \
     && groupadd -r --gid=990 slurm \
     && useradd -r -g slurm --uid=990 slurm \
     && groupadd -r --gid=991 slurmrest \
-    && useradd -r -g slurmrest --uid=991 slurmrest
-
-# Fix /etc permissions and create munge key
-RUN set -x \
+    && useradd -r -g slurmrest --uid=991 slurmrest \
     && chmod 0755 /etc \
-    && /sbin/create-munge-key
-
-# Create slurm dirs with correct ownership
-RUN set -x \
+    && /sbin/create-munge-key \
     && mkdir -m 0755 -p \
         /var/run/slurm \
         /var/spool/slurm \

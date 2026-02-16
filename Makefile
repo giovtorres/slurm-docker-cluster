@@ -1,4 +1,4 @@
-.PHONY: help build up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version
+.PHONY: help build build-no-cache up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version
 
 # Default target
 .DEFAULT_GOAL := help
@@ -17,6 +17,7 @@ help:  ## Show this help message
 	@echo ""
 	@echo "Cluster Management:"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "build" "Build Docker images"
+	@printf "  ${CYAN}%-15s${RESET} %s\n" "build-no-cache" "Build Docker images without cache"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "up" "Start containers"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "down" "Stop containers"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "clean" "Remove containers and volumes"
@@ -53,6 +54,9 @@ help:  ## Show this help message
 
 build:  ## Build Docker images
 	docker compose --progress plain build
+
+build-no-cache:  ## Build Docker images without cache
+	docker compose --progress plain build --no-cache
 
 up:  ## Start containers
 	docker compose up -d
