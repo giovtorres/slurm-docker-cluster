@@ -91,16 +91,12 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
 ARG SLURM_VERSION
 ARG TARGETARCH
 
-# Enable CRB and EPEL repositories for runtime dependencies
+# Enable CRB and EPEL repositories, then install runtime dependencies
 RUN set -ex \
-    && dnf makecache \
     && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
-    && dnf makecache
-
-# Install runtime dependencies only
-RUN set -ex \
+    && dnf makecache \
     && dnf -y install \
        bash-completion \
        bzip2 \
@@ -164,20 +160,14 @@ RUN set -ex \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
-# Create slurm user and group
+# Create users, generate munge key, and set up directories
 RUN set -x \
     && groupadd -r --gid=990 slurm \
     && useradd -r -g slurm --uid=990 slurm \
     && groupadd -r --gid=991 slurmrest \
-    && useradd -r -g slurmrest --uid=991 slurmrest
-
-# Fix /etc permissions and create munge key
-RUN set -x \
+    && useradd -r -g slurmrest --uid=991 slurmrest \
     && chmod 0755 /etc \
-    && /sbin/create-munge-key
-
-# Create slurm dirs with correct ownership
-RUN set -x \
+    && /sbin/create-munge-key \
     && mkdir -m 0755 -p \
         /var/run/slurm \
         /var/spool/slurm \
