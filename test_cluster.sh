@@ -462,9 +462,16 @@ test_rest_api_nodes() {
     API_VERSION=$(get_api_version "$SLURM_VERSION")
     print_info "  Using API version: $API_VERSION"
 
-    # Test the exact command from README
-    RESPONSE=$(docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-        "http://localhost/slurm/${API_VERSION}/nodes" 2>&1)
+    # Get JWT token for authentication
+    JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+    if [ -z "$JWT_TOKEN" ]; then
+        print_fail "Failed to get JWT token for REST API authentication"
+        return 1
+    fi
+
+    # Test REST API with JWT authentication
+    RESPONSE=$(docker exec slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+        "http://slurmrestd:6820/slurm/${API_VERSION}/nodes" 2>&1)
 
     # Check if response is valid JSON
     if echo "$RESPONSE" | jq empty 2>/dev/null; then
@@ -493,9 +500,16 @@ test_rest_api_partitions() {
     # Detect API version
     API_VERSION=$(get_api_version "$SLURM_VERSION")
 
-    # Test the exact command from README
-    RESPONSE=$(docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-        "http://localhost/slurm/${API_VERSION}/partitions" 2>&1)
+    # Get JWT token for authentication
+    JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+    if [ -z "$JWT_TOKEN" ]; then
+        print_fail "Failed to get JWT token for REST API authentication"
+        return 1
+    fi
+
+    # Test REST API with JWT authentication
+    RESPONSE=$(docker exec slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+        "http://slurmrestd:6820/slurm/${API_VERSION}/partitions" 2>&1)
 
     # Check if response is valid JSON
     if echo "$RESPONSE" | jq empty 2>/dev/null; then
