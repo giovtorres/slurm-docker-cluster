@@ -392,20 +392,14 @@ test_validate_jwt_authentication() {
 
     print_info "  Using JWT Token: ${JWT_TOKEN:0:50}..."
 
-    # Get the latest data_parser version from slurmrestd
-    DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
+    API_VERSION=$(get_api_version)
 
-    if [ -z "$DATA_PARSER_VERSION" ]; then
-        print_fail "Failed to detect data_parser version"
-        return 1
-    fi
-
-    print_info "  Using data_parser version: $DATA_PARSER_VERSION"
+    print_info "  Using data_parser version: $API_VERSION"
 
     # Execute curl request with JWT token and check HTTP status code
     HTTP_CODE=$(docker exec slurmctld bash -c "curl -s -o /dev/null -w '%{http_code}' -k \
         -H 'X-SLURM-USER-TOKEN: $JWT_TOKEN' \
-        -X GET 'http://slurmrestd:6820/slurm/$DATA_PARSER_VERSION/diag'" 2>&1)
+        -X GET 'http://slurmrestd:6820/slurm/$API_VERSION/diag'" 2>&1)
 
     print_info "  HTTP Status Code: $HTTP_CODE"
 
@@ -431,35 +425,24 @@ test_python_version() {
     fi
 }
 
-# Detect REST API version based on Slurm version
+# Get the latest data_parser version from slurmrestd
 get_api_version() {
-    local slurm_version="$1"
+    local DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
 
-    # Extract major.minor version (e.g., "25.05" from "25.05.x")
-    local major_minor=$(echo "$slurm_version" | cut -d. -f1,2)
+    # Validate format: must be "v" followed by three numbers separated by two dots (e.g., v0.0.44)
+    if ! [[ $DATA_PARSER_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        print_fail "Invalid data_parser version format: '$DATA_PARSER_VERSION' (expected format: v0.0.44)"
+        return 1
+    fi
 
-    case "$major_minor" in
-        "24.11")
-            echo "v0.0.41"
-            ;;
-        "25.05")
-            echo "v0.0.42"
-            ;;
-        "25.11")
-            echo "v0.0.44"
-            ;;
-        *)
-            # Default to latest
-            echo "v0.0.44"
-            ;;
-    esac
+    echo $DATA_PARSER_VERSION
 }
 
 test_rest_api_nodes() {
     print_test "Testing REST API /nodes endpoint (README example)..."
 
     # Detect API version
-    API_VERSION=$(get_api_version "$SLURM_VERSION")
+    API_VERSION=$(get_api_version)
     print_info "  Using API version: $API_VERSION"
 
     # Get JWT token for authentication
@@ -498,7 +481,7 @@ test_rest_api_partitions() {
     print_test "Testing REST API /partitions endpoint (README example)..."
 
     # Detect API version
-    API_VERSION=$(get_api_version "$SLURM_VERSION")
+    API_VERSION=$(get_api_version)
 
     # Get JWT token for authentication
     JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
