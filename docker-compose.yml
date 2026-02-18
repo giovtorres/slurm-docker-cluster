@@ -60,8 +60,8 @@ services:
     privileged: true
     working_dir: /data
     environment:
-      - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-}
-      - SSH_ENABLE=${SSH_ENABLE:-false}
+      - ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST:-}
+      - SSH_ENABLE: ${SSH_ENABLE:-false}
     volumes:
       - etc_munge:/etc/munge:z
       - etc_slurm:/etc/slurm:z
