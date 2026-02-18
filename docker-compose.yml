@@ -67,7 +67,7 @@ services:
       - etc_slurm:/etc/slurm:z
       - slurm_jobdir:/data:z
       - var_log_slurm:/var/log/slurm:z
-      - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/root/.ssh/authorized_keys:ro
+      - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/tmp/authorized_keys_host:ro,z      
     ports:
       - "${SSH_PORT:-3022}:22"
     expose:
