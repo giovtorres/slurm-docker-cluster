@@ -64,6 +64,12 @@ then
         echo "---> Job completion configured for Elasticsearch"
     fi
 
+    # Sync GPU count in slurm.conf with GPU_COUNT env var
+    if grep -q "Gres=gpu:nvidia:" /etc/slurm/slurm.conf 2>/dev/null; then
+        sed -i "s/Gres=gpu:nvidia:[0-9]*/Gres=gpu:nvidia:${GPU_COUNT:-1}/" /etc/slurm/slurm.conf
+        echo "---> Configured Slurm GPU GRES count to ${GPU_COUNT:-1}"
+    fi
+
     echo "---> Starting the Slurm Controller Daemon (slurmctld) ..."
     exec gosu slurm /usr/sbin/slurmctld -i -Dvvv
 fi

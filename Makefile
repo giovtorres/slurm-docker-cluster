@@ -1,4 +1,4 @@
-.PHONY: help build build-no-cache up start down clean logs test test-monitoring status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples
+.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples
 
 # Default target
 .DEFAULT_GOAL := help
@@ -8,10 +8,19 @@ SUPPORTED_VERSIONS := 24.11.7 25.05.6 25.11.2
 # Read default version from .env.example (source of truth)
 DEFAULT_VERSION := $(shell grep '^SLURM_VERSION=' .env.example | cut -d= -f2)
 
-# Auto-detect monitoring profile based on .env configuration
-# If ELASTICSEARCH_HOST is set, automatically enable monitoring profile
+# Auto-detect profiles based on .env configuration
 ELASTICSEARCH_HOST := $(shell grep -E '^ELASTICSEARCH_HOST=' .env 2>/dev/null | cut -d= -f2)
-PROFILE_FLAG := $(if $(ELASTICSEARCH_HOST),--profile monitoring,)
+GPU_ENABLE := $(shell grep -E '^GPU_ENABLE=' .env 2>/dev/null | cut -d= -f2)
+
+# Build profile flags
+PROFILES :=
+ifdef ELASTICSEARCH_HOST
+    PROFILES += --profile monitoring
+endif
+ifeq ($(GPU_ENABLE),true)
+    PROFILES += --profile gpu
+endif
+PROFILE_FLAG := $(PROFILES)
 
 # Colors for help output
 CYAN := $(shell tput -Txterm setaf 6)
@@ -44,6 +53,7 @@ help:  ## Show this help message
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "shell" "Open shell in slurmctld"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test" "Run test suite"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-monitoring" "Run monitoring profile tests"
+	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-gpu" "Run GPU profile tests"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "quick-test" "Submit a quick test job"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "run-examples" "Run example jobs"
 	@echo ""
@@ -62,6 +72,10 @@ help:  ## Show this help message
 	@echo "Monitoring:"
 	@echo "  Enable:  Set ELASTICSEARCH_HOST=http://elasticsearch:9200 in .env"
 	@echo "  Disable: Comment out or remove ELASTICSEARCH_HOST from .env"
+	@echo ""
+	@echo "GPU Support (NVIDIA):"
+	@echo "  Enable:  Set GPU_ENABLE=true in .env (requires nvidia-container-toolkit on host)"
+	@echo "  Disable: Set GPU_ENABLE=false or remove GPU_ENABLE from .env"
 
 build:  ## Build Docker images
 	docker compose --progress plain build
@@ -86,6 +100,9 @@ test:  ## Run test suite
 
 test-monitoring:  ## Run monitoring profile test suite
 	./test_monitoring.sh
+
+test-gpu:  ## Run GPU profile test suite
+	./test_gpu.sh
 
 status:  ## Show cluster status
 	@echo "=== Containers ==="
