@@ -14,6 +14,13 @@ then
     chown slurm:slurm /etc/slurm/slurmdbd.conf
     chmod 600 /etc/slurm/slurmdbd.conf
 
+    # create jwt key for jwt/auth
+    if [ ! -f /etc/slurm/jwt_hs256.key ]; then
+        dd if=/dev/random of=/etc/slurm/jwt_hs256.key bs=32 count=1
+        chown slurm:slurm /etc/slurm/jwt_hs256.key
+        chmod 0600 /etc/slurm/jwt_hs256.key
+    fi
+
     # Wait for MySQL using environment variables directly
     until echo "SELECT 1" | mysql -h mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} 2>&1 > /dev/null
     do
@@ -78,7 +85,10 @@ then
     # Note: slurmrestd should NOT be run as SlurmUser or root (security requirement)
     mkdir -p /var/run/slurmrestd
     chown slurmrest:slurmrest /var/run/slurmrestd
-    exec gosu slurmrest /usr/sbin/slurmrestd -vvv unix:/var/run/slurmrestd/slurmrestd.socket 0.0.0.0:6820
+
+    # Export the SLURM_JWT=daemon environment variable before starting the slurmrestd daemon
+    # to activate AuthAltTypes=auth/jwt as the primary authentication mechanism
+    export SLURM_JWT=daemon; exec gosu slurmrest /usr/sbin/slurmrestd -vvv unix:/var/run/slurmrestd/slurmrestd.socket 0.0.0.0:6820
 fi
 
 if [ "$1" = "slurmd" ]

@@ -79,13 +79,16 @@ make run-examples
 Query cluster via REST API (version auto-detected: v0.0.44 for 25.11.x, v0.0.42 for 25.05.x, v0.0.41 for 24.11.x):
 
 ```bash
+# Get JWT Token
+JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+
 # Get nodes
-docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-  http://localhost/slurm/v0.0.42/nodes | jq
+docker exec slurmrestd curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+  http://localhost:6820/slurm/v0.0.42/nodes | jq .nodes
 
 # Get partitions
-docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-  http://localhost/slurm/v0.0.42/partitions | jq
+docker exec slurmrestd curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+  http://localhost:6820/slurm/v0.0.42/partitions | jq .partitions
 ```
 
 ### Elasticsearch and Kibana (Optional)

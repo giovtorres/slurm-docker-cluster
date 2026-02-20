@@ -326,6 +326,91 @@ test_singularity_multi_node_job() {
     fi
 }
 
+test_get_jwt_token() {
+    print_test "Testing JWT token generation..."
+
+    # Get JWT token from scontrol
+    TOKEN_OUTPUT=$(docker exec slurmctld scontrol token 2>&1)
+
+    # Extract token value (format: SLURM_JWT=eyJhb...)
+    if echo "$TOKEN_OUTPUT" | grep -q "SLURM_JWT="; then
+        JWT_TOKEN=$(echo "$TOKEN_OUTPUT" | grep "SLURM_JWT=" | cut -d'=' -f2)
+
+        if [ -z "$JWT_TOKEN" ]; then
+            print_fail "JWT token is empty"
+            return 1
+        fi
+
+        print_info "  JWT Token: ${JWT_TOKEN:0:50}..."
+
+        # Validate JWT token format (should have 3 parts separated by dots)
+        DOT_COUNT=$(echo "$JWT_TOKEN" | grep -o '\.' | wc -l)
+
+        if [ "$DOT_COUNT" -eq 2 ]; then
+            # Verify each part contains valid base64-like characters
+            HEADER=$(echo "$JWT_TOKEN" | cut -d'.' -f1)
+            PAYLOAD=$(echo "$JWT_TOKEN" | cut -d'.' -f2)
+            SIGNATURE=$(echo "$JWT_TOKEN" | cut -d'.' -f3)
+
+            if [ -n "$HEADER" ] && [ -n "$PAYLOAD" ] && [ -n "$SIGNATURE" ]; then
+                print_pass "Valid JWT token generated (3 valid parts)"
+            else
+                print_fail "JWT token has empty parts"
+                return 1
+            fi
+        else
+            print_fail "Invalid JWT token format (expected 3 parts separated by dots, got $((DOT_COUNT + 1)))"
+            print_info "  Token: $JWT_TOKEN"
+            return 1
+        fi
+    else
+        print_fail "Failed to get JWT token or invalid output format"
+        print_info "  Output: $TOKEN_OUTPUT"
+        return 1
+    fi
+}
+
+test_validate_jwt_authentication() {
+    print_test "Testing JWT authentication via slurmrestd..."
+
+    # Get JWT token from scontrol
+    TOKEN_OUTPUT=$(docker exec slurmctld scontrol token 2>&1)
+
+    # Extract token value (format: SLURM_JWT=eyJhb...)
+    if ! echo "$TOKEN_OUTPUT" | grep -q "SLURM_JWT="; then
+        print_fail "Failed to get JWT token"
+        print_info "  Output: $TOKEN_OUTPUT"
+        return 1
+    fi
+
+    JWT_TOKEN=$(echo "$TOKEN_OUTPUT" | grep "SLURM_JWT=" | cut -d'=' -f2)
+
+    if [ -z "$JWT_TOKEN" ]; then
+        print_fail "JWT token is empty"
+        return 1
+    fi
+
+    print_info "  Using JWT Token: ${JWT_TOKEN:0:50}..."
+
+    API_VERSION=$(get_api_version)
+
+    print_info "  Using data_parser version: $API_VERSION"
+
+    # Execute curl request with JWT token and check HTTP status code
+    HTTP_CODE=$(docker exec slurmctld bash -c "curl -s -o /dev/null -w '%{http_code}' -k \
+        -H 'X-SLURM-USER-TOKEN: $JWT_TOKEN' \
+        -X GET 'http://slurmrestd:6820/slurm/$API_VERSION/diag'" 2>&1)
+
+    print_info "  HTTP Status Code: $HTTP_CODE"
+
+    if [ "$HTTP_CODE" = "200" ]; then
+        print_pass "JWT authentication successful (HTTP 200)"
+    else
+        print_fail "JWT authentication failed (HTTP $HTTP_CODE, expected 200)"
+        return 1
+    fi
+}
+
 test_python_version() {
     print_test "Testing Python version..."
 
@@ -340,40 +425,36 @@ test_python_version() {
     fi
 }
 
-# Detect REST API version based on Slurm version
+# Get the latest data_parser version from slurmrestd
 get_api_version() {
-    local slurm_version="$1"
+    local DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
 
-    # Extract major.minor version (e.g., "25.05" from "25.05.x")
-    local major_minor=$(echo "$slurm_version" | cut -d. -f1,2)
+    # Validate format: must be "v" followed by three numbers separated by two dots (e.g., v0.0.44)
+    if ! [[ $DATA_PARSER_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        print_fail "Invalid data_parser version format: '$DATA_PARSER_VERSION' (expected format: v0.0.44)"
+        return 1
+    fi
 
-    case "$major_minor" in
-        "24.11")
-            echo "v0.0.41"
-            ;;
-        "25.05")
-            echo "v0.0.42"
-            ;;
-        "25.11")
-            echo "v0.0.44"
-            ;;
-        *)
-            # Default to latest
-            echo "v0.0.44"
-            ;;
-    esac
+    echo $DATA_PARSER_VERSION
 }
 
 test_rest_api_nodes() {
     print_test "Testing REST API /nodes endpoint (README example)..."
 
     # Detect API version
-    API_VERSION=$(get_api_version "$SLURM_VERSION")
+    API_VERSION=$(get_api_version)
     print_info "  Using API version: $API_VERSION"
 
-    # Test the exact command from README
-    RESPONSE=$(docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-        "http://localhost/slurm/${API_VERSION}/nodes" 2>&1)
+    # Get JWT token for authentication
+    JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+    if [ -z "$JWT_TOKEN" ]; then
+        print_fail "Failed to get JWT token for REST API authentication"
+        return 1
+    fi
+
+    # Test REST API with JWT authentication
+    RESPONSE=$(docker exec slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+        "http://slurmrestd:6820/slurm/${API_VERSION}/nodes" 2>&1)
 
     # Check if response is valid JSON
     if echo "$RESPONSE" | jq empty 2>/dev/null; then
@@ -400,11 +481,18 @@ test_rest_api_partitions() {
     print_test "Testing REST API /partitions endpoint (README example)..."
 
     # Detect API version
-    API_VERSION=$(get_api_version "$SLURM_VERSION")
+    API_VERSION=$(get_api_version)
 
-    # Test the exact command from README
-    RESPONSE=$(docker exec slurmrestd curl -s --unix-socket /var/run/slurmrestd/slurmrestd.socket \
-        "http://localhost/slurm/${API_VERSION}/partitions" 2>&1)
+    # Get JWT token for authentication
+    JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+    if [ -z "$JWT_TOKEN" ]; then
+        print_fail "Failed to get JWT token for REST API authentication"
+        return 1
+    fi
+
+    # Test REST API with JWT authentication
+    RESPONSE=$(docker exec slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+        "http://slurmrestd:6820/slurm/${API_VERSION}/partitions" 2>&1)
 
     # Check if response is valid JSON
     if echo "$RESPONSE" | jq empty 2>/dev/null; then
@@ -470,6 +558,8 @@ main() {
     test_singularity_multi_node_job || true
     test_rest_api_nodes || true
     test_rest_api_partitions || true
+    test_get_jwt_token || true
+    test_validate_jwt_authentication || true
 
     # Print summary
     echo ""

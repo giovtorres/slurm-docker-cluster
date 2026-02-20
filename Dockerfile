@@ -54,6 +54,8 @@ RUN set -ex \
        rpmdevtools \
        rrdtool-devel \
        wget \
+       libjwt \
+       libjwt-devel \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -121,6 +123,7 @@ RUN set -ex \
        readline \
        vim-enhanced \
        wget \
+       libjwt \
     && dnf clean all \
     && rm -rf /var/cache/dnf \
     && alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
