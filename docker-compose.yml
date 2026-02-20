@@ -59,12 +59,16 @@ services:
     privileged: true
     working_dir: /data
     environment:
-      ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST:-}
+      - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-}
+      - SSH_ENABLE=${SSH_ENABLE:-false}
     volumes:
       - etc_munge:/etc/munge:z
       - etc_slurm:/etc/slurm:z
       - slurm_jobdir:/data:z
       - var_log_slurm:/var/log/slurm:z
+      - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/tmp/authorized_keys_host:ro,z      
+    ports:
+      - "${SSH_PORT:-3022}:22"
     expose:
       - "6817"
     depends_on:

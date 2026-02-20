@@ -35,6 +35,28 @@ fi
 
 if [ "$1" = "slurmctld" ]
 then
+
+    if [ "$SSH_ENABLE" = "true" ]
+    then
+        echo "---> Configuring SSH ..."
+        # Require authorized_keys from host mount to exist and be a regular file
+        if [ ! -f /tmp/authorized_keys_host ]; then
+            echo "---> ERROR: host 'authorized_keys' not correctly mounted to /tmp/authorized_keys_host (file missing or SSH_AUTHORIZED_KEYS variable has wrong filename )." >&2
+            exit 1
+        fi
+
+        mkdir -p /root/.ssh
+        cp /tmp/authorized_keys_host /root/.ssh/authorized_keys
+        chown root:root /root/.ssh/authorized_keys
+        chmod 600 /root/.ssh/authorized_keys
+        chown root:root /root/.ssh
+        chmod 700 /root/.ssh
+        echo "---> Copied and set permissions for authorized_keys"
+
+        echo "---> Start SSHD ..."
+        /usr/sbin/sshd -D -e &
+    fi
+
     echo "---> Waiting for slurmdbd to become active before starting slurmctld ..."
 
     until 2>/dev/null >/dev/tcp/slurmdbd/6819
