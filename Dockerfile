@@ -19,7 +19,7 @@ RUN set -ex \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
-    && dnf -y install \
+    && dnf -y install --nobest --exclude='*.i686' \
        autoconf \
        automake \
        bzip2 \
