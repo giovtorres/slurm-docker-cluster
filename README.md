@@ -28,7 +28,7 @@ make help
 
 ```bash
 cp .env.example .env
-# Edit .env to change SLURM_VERSION or enable ELASTICSEARCH_HOST
+# Edit .env to change SLURM_VERSION, enable ELASTICSEARCH_HOST, or enable GPU_ENABLE
 make up
 ```
 
@@ -45,6 +45,7 @@ make up
 - **slurmctld** - Controller for job scheduling
 - **slurmrestd** - REST API daemon (HTTP/JSON access)
 - **c1, c2** - Compute nodes
+- **g1** - (optional) GPU compute node with NVIDIA support
 - **elasticsearch** - (optional) indexing jobs
 - **kibana** - (optional) visualization for elasticsearch
 
@@ -113,6 +114,34 @@ make test-monitoring
 ```
 
 **Indexed data:** Job ID, user, partition, state, times, nodes, exit code
+
+## 🎮 GPU Support (NVIDIA)
+
+Enable optional NVIDIA GPU support with dedicated GPU node:
+
+```bash
+# 1. One-time host setup (add NVIDIA repo and install nvidia-container-toolkit)
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+sudo dnf install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# 2. Enable GPU in .env (CUDA toolkit installed in container automatically)
+GPU_ENABLE=true
+CUDA_VERSION=12.6  # Optional, defaults to 12.6
+
+# 3. Build with GPU support
+make rebuild
+
+# 4. Verify GPU detection
+docker exec g1 nvidia-smi
+
+# Test GPU functionality
+make test-gpu
+```
+
+> **Note:** GPU testing is not included in CI (GitHub-hosted runners have no GPUs). Run `make test-gpu` manually on a host with an NVIDIA GPU and `nvidia-container-toolkit` installed.
 
 ## 🔄 Cluster Management
 

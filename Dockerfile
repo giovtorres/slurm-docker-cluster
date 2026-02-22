@@ -19,7 +19,7 @@ RUN set -ex \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
-    && dnf -y install \
+    && dnf -y install --nobest --exclude='*.i686' \
        autoconf \
        automake \
        bzip2 \
@@ -92,6 +92,8 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
 
 ARG SLURM_VERSION
 ARG TARGETARCH
+ARG GPU_ENABLE
+ARG CUDA_VERSION
 
 # Enable CRB and EPEL repositories, then install runtime dependencies
 RUN set -ex \
@@ -148,6 +150,24 @@ RUN set -ex \
     && gosu --version \
     && gosu nobody true
 
+# Conditionally install CUDA toolkit for GPU support
+RUN if [ "$GPU_ENABLE" = "true" ]; then \
+      set -ex && \
+      echo "Installing CUDA ${CUDA_VERSION} runtime for GPU support..." && \
+      dnf config-manager --add-repo \
+        https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
+      dnf -y install \
+        cuda-nvml-devel-$(echo ${CUDA_VERSION} | tr '.' '-') \
+        cuda-cudart-$(echo ${CUDA_VERSION} | tr '.' '-') \
+        cuda-nvcc-$(echo ${CUDA_VERSION} | tr '.' '-') \
+        nvidia-driver-cuda-libs && \
+      dnf clean all && \
+      rm -rf /var/cache/dnf && \
+      echo "CUDA ${CUDA_VERSION} installed successfully"; \
+    else \
+      echo "GPU support disabled, skipping CUDA installation"; \
+    fi
+
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
 # Install Slurm RPMs
@@ -203,6 +223,14 @@ RUN set -ex \
        else \
          echo "Using common cgroup.conf"; \
          cp /tmp/slurm-config/common/cgroup.conf /etc/slurm/cgroup.conf; \
+       fi \
+    && if [ "$GPU_ENABLE" = "true" ]; then \
+         echo "GPU support enabled, installing gres.conf"; \
+         cp /tmp/slurm-config/common/gres.conf /etc/slurm/gres.conf; \
+         chown slurm:slurm /etc/slurm/gres.conf; \
+         chmod 644 /etc/slurm/gres.conf; \
+       else \
+         echo "GPU support disabled, skipping gres.conf"; \
        fi \
     && chown slurm:slurm /etc/slurm/slurm.conf /etc/slurm/cgroup.conf /etc/slurm/slurmdbd.conf \
     && chmod 644 /etc/slurm/slurm.conf /etc/slurm/cgroup.conf \
