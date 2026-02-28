@@ -66,13 +66,8 @@ test_containers_running() {
         fi
     done
 
-    # Check worker nodes dynamically
-    WORKER_COUNT=0
-    for node_service in c1 c2; do
-        if docker compose ps "$node_service" 2>/dev/null | grep -q "Up"; then
-            WORKER_COUNT=$((WORKER_COUNT + 1))
-        fi
-    done
+    # Check cpu-worker nodes dynamically
+    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
 
     if [ "$WORKER_COUNT" -gt 0 ]; then
         print_info "  ✓ $WORKER_COUNT worker node(s) running"
@@ -138,13 +133,8 @@ test_compute_nodes() {
 
     NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
 
-    # Count running worker nodes
-    EXPECTED_COUNT=0
-    for node_service in c1 c2; do
-        if docker compose ps "$node_service" 2>/dev/null | grep -q "Up"; then
-            EXPECTED_COUNT=$((EXPECTED_COUNT + 1))
-        fi
-    done
+    # Count running cpu-worker nodes
+    EXPECTED_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
 
     if [ "$NODE_COUNT" -eq "$EXPECTED_COUNT" ]; then
         print_pass "$NODE_COUNT compute node(s) are available (matches expected $EXPECTED_COUNT)"
@@ -171,10 +161,84 @@ test_nodes_state() {
 test_partition() {
     print_test "Testing partition configuration..."
 
-    if docker exec slurmctld sinfo -h | grep -q "normal"; then
-        print_pass "Default partition 'normal' exists"
+    if docker exec slurmctld sinfo -h | grep -q "cpu"; then
+        print_pass "Default partition 'cpu' exists"
     else
-        print_fail "Default partition 'normal' not found"
+        print_fail "Default partition 'cpu' not found"
+        return 1
+    fi
+}
+
+test_config_consistency() {
+    print_test "Testing config consistency (slurm.conf vs entrypoint Feature tags)..."
+
+    ALL_CONSISTENT=true
+
+    # Get the active slurm.conf from the running container
+    SLURM_CONF=$(docker exec slurmctld cat /etc/slurm/slurm.conf 2>/dev/null)
+    ENTRYPOINT=$(docker exec slurmctld cat /usr/local/bin/docker-entrypoint.sh 2>/dev/null)
+
+    if [ -z "$SLURM_CONF" ] || [ -z "$ENTRYPOINT" ]; then
+        print_fail "Could not read slurm.conf or docker-entrypoint.sh from container"
+        return 1
+    fi
+
+    # Check CPU: slurm.conf NodeSet feature must match entrypoint's slurmd-cpu Feature
+    CPU_CONF_FEATURE=$(echo "$SLURM_CONF" | grep -oP 'NodeSet=cpu_nodes\s+Feature=\K\S+' || true)
+    CPU_ENTRY_FEATURE=$(echo "$ENTRYPOINT" | sed -n '/slurmd-cpu/,/^fi$/p' | grep -oP 'Feature=\K[a-zA-Z0-9_]+' | head -1 || true)
+
+    if [ -z "$CPU_CONF_FEATURE" ]; then
+        print_fail "  No cpu_nodes NodeSet Feature found in slurm.conf"
+        ALL_CONSISTENT=false
+    elif [ -z "$CPU_ENTRY_FEATURE" ]; then
+        print_fail "  No Feature found in entrypoint for slurmd-cpu"
+        ALL_CONSISTENT=false
+    elif [ "$CPU_CONF_FEATURE" = "$CPU_ENTRY_FEATURE" ]; then
+        print_info "  ✓ CPU Feature matches: slurm.conf($CPU_CONF_FEATURE) = entrypoint($CPU_ENTRY_FEATURE)"
+    else
+        print_fail "  CPU Feature mismatch: slurm.conf($CPU_CONF_FEATURE) != entrypoint($CPU_ENTRY_FEATURE)"
+        ALL_CONSISTENT=false
+    fi
+
+    # Check GPU: slurm.conf NodeSet feature must match entrypoint's slurmd-gpu Feature
+    GPU_CONF_FEATURE=$(echo "$SLURM_CONF" | grep -oP 'NodeSet=gpu_nodes\s+Feature=\K\S+' || true)
+    GPU_ENTRY_FEATURE=$(echo "$ENTRYPOINT" | sed -n '/slurmd-gpu/,/^fi$/p' | grep -oP 'Feature=\K[a-zA-Z0-9_]+' | head -1 || true)
+
+    if [ -z "$GPU_CONF_FEATURE" ]; then
+        print_fail "  No gpu_nodes NodeSet Feature found in slurm.conf"
+        ALL_CONSISTENT=false
+    elif [ -z "$GPU_ENTRY_FEATURE" ]; then
+        print_fail "  No Feature found in entrypoint for slurmd-gpu"
+        ALL_CONSISTENT=false
+    elif [ "$GPU_CONF_FEATURE" = "$GPU_ENTRY_FEATURE" ]; then
+        print_info "  ✓ GPU Feature matches: slurm.conf($GPU_CONF_FEATURE) = entrypoint($GPU_ENTRY_FEATURE)"
+    else
+        print_fail "  GPU Feature mismatch: slurm.conf($GPU_CONF_FEATURE) != entrypoint($GPU_ENTRY_FEATURE)"
+        ALL_CONSISTENT=false
+    fi
+
+    # Verify CPU and GPU partitions reference their respective NodeSets
+    CPU_PARTITION_NODES=$(echo "$SLURM_CONF" | grep -oP 'PartitionName=cpu\s+Nodes=\K\S+' || true)
+    GPU_PARTITION_NODES=$(echo "$SLURM_CONF" | grep -oP 'PartitionName=gpu\s+Nodes=\K\S+' || true)
+
+    if [ "$CPU_PARTITION_NODES" = "cpu_nodes" ]; then
+        print_info "  ✓ cpu partition references cpu_nodes NodeSet"
+    else
+        print_fail "  cpu partition references '$CPU_PARTITION_NODES' instead of 'cpu_nodes'"
+        ALL_CONSISTENT=false
+    fi
+
+    if [ "$GPU_PARTITION_NODES" = "gpu_nodes" ]; then
+        print_info "  ✓ gpu partition references gpu_nodes NodeSet"
+    else
+        print_fail "  gpu partition references '$GPU_PARTITION_NODES' instead of 'gpu_nodes'"
+        ALL_CONSISTENT=false
+    fi
+
+    if [ "$ALL_CONSISTENT" = true ]; then
+        print_pass "Config consistency verified (CPU=Feature=$CPU_CONF_FEATURE, GPU=Feature=$GPU_CONF_FEATURE)"
+    else
+        print_fail "Config inconsistencies detected"
         return 1
     fi
 }
@@ -260,16 +324,137 @@ test_multi_node_job() {
 test_resource_limits() {
     print_test "Testing resource limit configuration..."
 
-    # Check if nodes have CPU and memory configured
-    NODE_INFO=$(docker exec slurmctld scontrol show node c1 | grep -E "CPUTot|RealMemory")
+    # Check if dynamic nodes have CPU and memory configured
+    FIRST_NODE=$(docker exec slurmctld scontrol show nodes 2>/dev/null | grep -oP 'NodeName=c\d+' | head -1 | cut -d= -f2)
 
-    if echo "$NODE_INFO" | grep -q "CPUTot=2" && echo "$NODE_INFO" | grep -q "RealMemory=1000"; then
-        print_pass "Resource limits configured correctly"
+    if [ -z "$FIRST_NODE" ]; then
+        print_fail "No dynamic CPU worker nodes found"
+        return 1
+    fi
+
+    NODE_INFO=$(docker exec slurmctld scontrol show node "$FIRST_NODE" | grep -E "CPUTot|RealMemory")
+
+    if echo "$NODE_INFO" | grep -qP "CPUTot=[0-9]+" && echo "$NODE_INFO" | grep -qP "RealMemory=[0-9]+"; then
+        print_pass "Resource limits configured correctly on $FIRST_NODE"
     else
-        print_fail "Resource limits not configured as expected"
+        print_fail "Resource limits not configured as expected on $FIRST_NODE"
         print_info "  Node info: $NODE_INFO"
         return 1
     fi
+}
+
+test_scale_up() {
+    print_test "Testing dynamic scale-up..."
+
+    # Get initial node count
+    INITIAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+    print_info "  Initial node count: $INITIAL_COUNT"
+
+    # Get current worker count and scale up by 1
+    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+    TARGET=$((WORKER_COUNT + 1))
+    print_info "  Scaling cpu-worker from $WORKER_COUNT to $TARGET"
+
+    docker compose up -d --scale cpu-worker=$TARGET --no-recreate >/dev/null 2>&1
+
+    # Poll until the new node appears in Slurm and is ready (max 60s)
+    EXPECTED_COUNT=$((INITIAL_COUNT + 1))
+    for i in $(seq 1 60); do
+        CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h 2>/dev/null | wc -l)
+        if [ "$CURRENT_COUNT" -ge "$EXPECTED_COUNT" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+
+    if [ "$CURRENT_COUNT" -ne "$EXPECTED_COUNT" ]; then
+        print_fail "Expected $EXPECTED_COUNT nodes after scale-up, found $CURRENT_COUNT"
+        return 1
+    fi
+
+    print_info "  Node count after scale-up: $CURRENT_COUNT"
+
+    # Verify all node names match c<N> pattern (no container ID fallbacks)
+    BAD_NAMES=$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+        | grep -oP 'NodeName=\S+' | cut -d= -f2 | grep -vP '^c\d+$' || true)
+
+    if [ -n "$BAD_NAMES" ]; then
+        print_fail "Found node names not matching c<N> pattern: $BAD_NAMES"
+        return 1
+    fi
+
+    # Verify all nodes are idle
+    NON_IDLE=$(docker exec slurmctld sinfo -N -h -o "%N %T" 2>/dev/null | grep -v "idle" || true)
+
+    if [ -n "$NON_IDLE" ]; then
+        print_fail "Some nodes are not idle after scale-up: $NON_IDLE"
+        return 1
+    fi
+
+    print_pass "Scale-up successful ($INITIAL_COUNT -> $CURRENT_COUNT nodes, all idle)"
+}
+
+test_scale_down() {
+    print_test "Testing dynamic scale-down with stale node cleanup..."
+
+    # Get current counts
+    CURRENT_NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+
+    if [ "$WORKER_COUNT" -lt 2 ]; then
+        print_info "  Skipping (only $WORKER_COUNT worker, need at least 2 to scale down)"
+        return 0
+    fi
+
+    TARGET=$((WORKER_COUNT - 1))
+    EXPECTED_COUNT=$((CURRENT_NODE_COUNT - 1))
+    print_info "  Scaling cpu-worker from $WORKER_COUNT to $TARGET"
+
+    docker compose up -d --scale cpu-worker=$TARGET --no-recreate >/dev/null 2>&1
+
+    # Wait for the extra container to stop
+    for i in $(seq 1 15); do
+        LIVE=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+        if [ "$LIVE" -le "$TARGET" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    # Clean up stale nodes (mirrors Makefile scale-cpu-workers logic)
+    LIVE_NODES=$(docker compose ps cpu-worker -q 2>/dev/null \
+        | while read cid; do
+            docker exec "$cid" hostname 2>/dev/null
+        done | sort)
+    SLURM_NODES=$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+        | grep -oP 'NodeName=c\d+' | cut -d= -f2 | sort)
+    STALE_NODES=$(comm -23 <(echo "$SLURM_NODES") <(echo "$LIVE_NODES") | paste -sd, -)
+
+    if [ -n "$STALE_NODES" ]; then
+        print_info "  Removing stale nodes: $STALE_NODES"
+        docker exec slurmctld scontrol delete nodename=$STALE_NODES 2>/dev/null || true
+    fi
+
+    # Verify node count decreased
+    FINAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+
+    if [ "$FINAL_COUNT" -ne "$EXPECTED_COUNT" ]; then
+        print_fail "Expected $EXPECTED_COUNT nodes after scale-down, found $FINAL_COUNT"
+        return 1
+    fi
+
+    # Verify the stale node is gone
+    if [ -n "$STALE_NODES" ]; then
+        FIRST_STALE=$(echo "$STALE_NODES" | cut -d, -f1)
+        if docker exec slurmctld scontrol show node "$FIRST_STALE" 2>/dev/null | grep -q "NodeName"; then
+            print_fail "Stale node $FIRST_STALE still present in Slurm"
+            return 1
+        fi
+    fi
+
+    print_pass "Scale-down successful ($CURRENT_NODE_COUNT -> $FINAL_COUNT nodes, stale nodes cleaned)"
 }
 
 test_singularity_pull_image() {
@@ -548,11 +733,14 @@ main() {
     test_compute_nodes || true
     test_nodes_state || true
     test_partition || true
+    test_config_consistency || true
     test_job_submission || true
     test_job_execution || true
     test_job_accounting || true
     test_multi_node_job || true
     test_resource_limits || true
+    test_scale_up || true
+    test_scale_down || true
     test_python_version || true
     test_singularity_pull_image || true
     test_singularity_multi_node_job || true

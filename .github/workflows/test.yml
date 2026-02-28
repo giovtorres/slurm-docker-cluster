@@ -81,11 +81,11 @@ jobs:
 
       - name: Wait for compute nodes to be healthy
         run: |
-          timeout 90 bash -c 'until docker compose ps c1 | grep -q "healthy" && docker compose ps c2 | grep -q "healthy"; do
-            echo "Waiting for compute nodes..."
+          timeout 90 bash -c 'until docker compose ps cpu-worker 2>/dev/null | grep -q "healthy"; do
+            echo "Waiting for cpu-workers..."
             sleep 2
           done'
-          echo "All compute nodes are healthy"
+          echo "CPU workers are healthy"
           echo "Waiting for cluster to auto-register with slurmdbd..."
           sleep 10
 

@@ -62,7 +62,6 @@ services:
     working_dir: /data
     environment:
       ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST:-}
-      GPU_COUNT: ${GPU_COUNT:-1}
       SSH_ENABLE: ${SSH_ENABLE:-false}
     volumes:
       - etc_munge:/etc/munge:z
@@ -112,13 +111,13 @@ services:
       retries: 3
       start_period: 20s
 
-  c1:
+  cpu-worker:
     image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
-    command: ["slurmd"]
-    container_name: c1
-    hostname: c1
+    command: ["slurmd-cpu"]
     working_dir: /data
     privileged: true
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm-docker-cluster}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -137,43 +136,19 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-
-  c2:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
-    command: ["slurmd"]
-    container_name: c2
-    hostname: c2
-    working_dir: /data
-    privileged: true
-    volumes:
-      - etc_munge:/etc/munge
-      - etc_slurm:/etc/slurm
-      - slurm_jobdir:/data
-      - var_log_slurm:/var/log/slurm
-    expose:
-      - "6818"
-    depends_on:
-      slurmctld:
-        condition: service_healthy
-    networks:
-      - slurm-network
-    healthcheck:
-      test: ["CMD-SHELL", "pidof slurmd"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+    deploy:
+      replicas: ${CPU_WORKER_COUNT:-2}
 
   # GPU compute node (NVIDIA)
-  # Requires: GPU_ENABLE=true in .env and nvidia-container-toolkit on host
-  g1:
+  # Requires: GPU_ENABLE=true in .env and nvidia-container-toolkit installed on host
+  gpu-worker:
     image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
-    command: ["slurmd"]
-    container_name: g1
-    hostname: g1
+    command: ["slurmd-gpu"]
     working_dir: /data
     privileged: true
     profiles: ["gpu"]
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm-docker-cluster}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -186,19 +161,20 @@ services:
         condition: service_healthy
     networks:
       - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pidof slurmd"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     deploy:
+      replicas: ${GPU_WORKER_COUNT:-1}
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: ${GPU_COUNT:-1}
+              count: all
               capabilities: [gpu, compute, utility]
-    healthcheck:
-      test: ["CMD-SHELL", "pidof slurmd"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
 
   # Optional Elasticsearch for job completion logging
   # Start with: docker compose --profile monitoring up -d

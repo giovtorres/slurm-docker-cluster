@@ -11,6 +11,8 @@ FROM rockylinux/rockylinux:9 AS builder
 
 ARG SLURM_VERSION
 ARG TARGETARCH
+ARG GPU_ENABLE
+ARG CUDA_VERSION
 
 # Enable CRB and EPEL repositories for development packages
 # Install RPM build tools and dependencies
@@ -64,6 +66,22 @@ RUN rpmdev-setuptree
 
 # Copy RPM macros
 COPY rpmbuild/slurm.rpmmacros /root/.rpmmacros
+
+# Conditionally install NVML devel and enable --with-nvml for GPU-aware Slurm build
+# Must run before rpmbuild so configure can find the NVML headers.
+RUN if [ "${GPU_ENABLE}" = "true" ]; then \
+        set -ex && \
+        CUDA_ARCH=$(case "${TARGETARCH}" in amd64) echo "x86_64" ;; arm64) echo "sbsa" ;; *) echo "x86_64" ;; esac) && \
+        dnf config-manager --add-repo "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/${CUDA_ARCH}/cuda-rhel9.repo" && \
+        dnf install -y "cuda-nvml-devel-$(echo ${CUDA_VERSION} | tr '.' '-')" && \
+        dnf clean all && \
+        rm -rf /var/cache/dnf && \
+        NVML_H=$(find /usr/local -name nvml.h 2>/dev/null | head -1) && \
+        NVML_SO=$(find /usr/local -name 'libnvidia-ml.so' 2>/dev/null | head -1) && \
+        ln -sf "$NVML_H" /usr/include/nvml.h && \
+        ln -sf "$NVML_SO" /usr/lib64/libnvidia-ml.so && \
+        echo "%_with_nvml --with-nvml=/usr" >> /root/.rpmmacros; \
+    fi
 
 # Download official Slurm release tarball and build RPMs with slurmrestd enabled
 # Architecture mapping: Docker TARGETARCH (amd64, arm64) -> RPM arch (x86_64, aarch64)

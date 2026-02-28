@@ -12,24 +12,12 @@ usage.
 ```bash
 git clone https://github.com/giovtorres/slurm-docker-cluster.git
 cd slurm-docker-cluster
+cp .env.example .env    # optional: edit to change version, enable GPU, etc.
 
-# Start with defaults (Slurm 25.11.x, no monitoring)
-make up
-
-# Verify cluster is working
-make status
-make test
-
-# See all available commands
-make help
-```
-
-**To customize:** Copy `.env.example` to `.env` and modify settings before running `make up`
-
-```bash
-cp .env.example .env
-# Edit .env to change SLURM_VERSION, enable ELASTICSEARCH_HOST, or enable GPU_ENABLE
-make up
+make up                 # build and start the cluster
+make status             # verify nodes are idle
+make test               # run full test suite
+make help               # see all available commands
 ```
 
 **Supported Slurm versions:** 25.11.x, 25.05.x, 24.11.x
@@ -44,8 +32,8 @@ make up
 - **slurmdbd** - Database daemon for accounting
 - **slurmctld** - Controller for job scheduling
 - **slurmrestd** - REST API daemon (HTTP/JSON access)
-- **c1, c2** - Compute nodes
-- **g1** - (optional) GPU compute node with NVIDIA support
+- **c1, c2** - CPU compute nodes (dynamically scalable)
+- **g1** - (optional) GPU compute node with NVIDIA support (dynamically scalable)
 - **elasticsearch** - (optional) indexing jobs
 - **kibana** - (optional) visualization for elasticsearch
 
@@ -72,6 +60,32 @@ sacct                          # View accounting
 # Or run example jobs
 make run-examples
 ```
+
+## 📈 Scaling
+
+Compute nodes use Slurm's dynamic registration (`slurmd -Z`) and self-register
+with sequential hostnames (c1, c2, c3... for CPU; g1, g2... for GPU). Scale up
+or down at any time without rebuilding.
+
+### Scale CPU Workers
+
+```bash
+# Scale to 5 CPU workers (default is 2)
+make scale-cpu-workers N=5
+
+# Or set the default count in .env
+CPU_WORKER_COUNT=4
+make up
+```
+
+### Scale GPU Workers
+
+```bash
+# Scale to 3 GPU workers (requires GPU_ENABLE=true)
+make scale-gpu-workers N=3
+```
+
+Verify with `make status`.
 
 ## 📊 Monitoring
 

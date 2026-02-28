@@ -55,48 +55,75 @@ check_gpu_enabled() {
     return 0
 }
 
-# Check g1 container is running
-check_g1_running() {
-    run_test "Check g1 GPU node container running"
+# Get the first gpu-worker container name
+get_first_gpu_worker() {
+    docker compose ps gpu-worker --format '{{.Names}}' 2>/dev/null | head -1
+}
 
-    if ! docker ps --format '{{.Names}}' | grep -q '^g1$'; then
-        log_error "g1 container not running"
-        echo "Start GPU node with: make up"
+# Get the first gpu-worker node name from Slurm
+get_first_gpu_node() {
+    docker exec slurmctld scontrol show nodes 2>/dev/null | grep -oP 'NodeName=g\d+' | head -1 | cut -d= -f2
+}
+
+# Check gpu-worker container is running
+check_gpu_worker_running() {
+    run_test "Check gpu-worker container running"
+
+    local gpu_worker
+    gpu_worker=$(get_first_gpu_worker)
+
+    if [[ -z "$gpu_worker" ]]; then
+        log_error "No gpu-worker containers running"
+        echo "Start GPU workers with: make up (with GPU_ENABLE=true in .env)"
         return 1
     fi
 
-    log_success "g1 container is running"
+    local worker_count
+    worker_count=$(docker compose ps gpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+
+    log_success "$worker_count gpu-worker container(s) running"
     return 0
 }
 
-# Check g1 node registered in Slurm
-check_g1_registered() {
-    run_test "Check g1 node registered in Slurm"
+# Check gpu-worker node registered in Slurm
+check_gpu_worker_registered() {
+    run_test "Check gpu-worker node registered in Slurm"
 
-    if ! docker exec slurmctld scontrol show node g1 &>/dev/null; then
-        log_error "g1 node not registered in Slurm"
+    local gpu_node
+    gpu_node=$(get_first_gpu_node)
+
+    if [[ -z "$gpu_node" ]]; then
+        log_error "No gpu-worker nodes registered in Slurm"
         return 1
     fi
 
-    log_success "g1 node registered in Slurm"
+    log_success "gpu-worker node registered in Slurm: $gpu_node"
     return 0
 }
 
-# Check g1 node has GPU GRES
+# Check gpu-worker node has GPU GRES
 check_gres_configured() {
-    run_test "Check GPU GRES configured on g1"
+    run_test "Check GPU GRES configured on gpu-worker"
+
+    local gpu_node
+    gpu_node=$(get_first_gpu_node)
+
+    if [[ -z "$gpu_node" ]]; then
+        log_error "No gpu-worker nodes found"
+        return 1
+    fi
 
     local gres_output
-    gres_output=$(docker exec slurmctld scontrol show node g1 | grep "Gres=" || true)
+    gres_output=$(docker exec slurmctld scontrol show node "$gpu_node" | grep "Gres=" || true)
 
-    if [[ ! "$gres_output" =~ gpu:nvidia:1 ]]; then
-        log_error "GPU GRES not configured correctly on g1"
-        echo "Expected: Gres=gpu:nvidia:1"
+    if [[ ! "$gres_output" =~ gpu:nvidia ]]; then
+        log_error "GPU GRES not configured correctly on $gpu_node"
+        echo "Expected: Gres containing gpu:nvidia"
         echo "Got: $gres_output"
         return 1
     fi
 
-    log_success "GPU GRES configured: $gres_output"
+    log_success "GPU GRES configured on $gpu_node: $gres_output"
     return 0
 }
 
@@ -110,36 +137,40 @@ check_gpu_partition() {
     fi
 
     local partition_nodes
-    # Anchor to lines that start with whitespace + "Nodes=" to avoid matching
-    # AllocNodes=, MaxNodes=, TotalNodes= which also contain "Nodes="
     partition_nodes=$(docker exec slurmctld scontrol show partition gpu | grep -E "^\s+Nodes=" | cut -d= -f2)
 
-    if [[ "$partition_nodes" != "g1" ]]; then
-        log_error "GPU partition doesn't contain g1 node"
-        echo "Expected: Nodes=g1"
-        echo "Got: Nodes=$partition_nodes"
+    if [[ -z "$partition_nodes" ]] || [[ "$partition_nodes" == "(null)" ]]; then
+        log_error "GPU partition has no nodes"
         return 1
     fi
 
-    log_success "'gpu' partition configured with node g1"
+    log_success "'gpu' partition configured with nodes: $partition_nodes"
     return 0
 }
 
-# Check nvidia-smi works in g1 container
+# Check nvidia-smi works in gpu-worker container
 check_nvidia_smi() {
-    run_test "Check nvidia-smi works in g1 container"
+    run_test "Check nvidia-smi works in gpu-worker container"
 
-    if ! docker exec g1 nvidia-smi &>/dev/null; then
-        log_error "nvidia-smi not available in g1 container"
+    local gpu_worker
+    gpu_worker=$(get_first_gpu_worker)
+
+    if [[ -z "$gpu_worker" ]]; then
+        log_error "No gpu-worker container found"
+        return 1
+    fi
+
+    if ! docker exec "$gpu_worker" nvidia-smi &>/dev/null; then
+        log_error "nvidia-smi not available in $gpu_worker"
         echo "Ensure nvidia-container-toolkit is installed on host"
         return 1
     fi
 
     local gpu_count
-    gpu_count=$(docker exec g1 nvidia-smi --query-gpu=count --format=csv,noheader | head -n1)
+    gpu_count=$(docker exec "$gpu_worker" nvidia-smi --query-gpu=count --format=csv,noheader | head -n1)
 
     log_success "nvidia-smi detected $gpu_count GPU(s)"
-    docker exec g1 nvidia-smi
+    docker exec "$gpu_worker" nvidia-smi
     return 0
 }
 
@@ -261,14 +292,14 @@ main() {
         exit 1
     fi
 
-    if ! check_g1_running; then
+    if ! check_gpu_worker_running; then
         echo ""
-        echo "g1 container not running. Exiting."
+        echo "No gpu-worker containers running. Exiting."
         exit 1
     fi
 
     # Run tests (|| true so set -e doesn't abort on first failure; failures are tracked via TESTS_FAILED)
-    check_g1_registered || true
+    check_gpu_worker_registered || true
     check_gres_configured || true
     check_gpu_partition || true
     check_nvidia_smi || true
