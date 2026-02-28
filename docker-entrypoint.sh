@@ -1,6 +1,33 @@
 #!/bin/bash
 set -e
 
+# Detect replica number by matching own IP against Docker Compose DNS entries.
+# Compose names containers as <project>-<service>-<N>, and Docker's embedded DNS
+# resolves these names within the network. We iterate N=1..max and find which
+# one resolves to our IP.
+# Falls back to the container ID (hostname) if detection fails.
+detect_replica_number() {
+    local service_name="$1"
+    local max_replicas="${2:-64}"
+    local my_ip
+    my_ip=$(hostname -i 2>/dev/null | awk '{print $1}')
+
+    for i in $(seq 1 "$max_replicas"); do
+        local resolved
+        resolved=$(getent hosts "${COMPOSE_PROJECT_NAME}-${service_name}-${i}" 2>/dev/null | awk '{print $1}')
+        if [ "$resolved" = "$my_ip" ]; then
+            echo "$i"
+            return 0
+        elif [ -z "$resolved" ]; then
+            break
+        fi
+    done
+
+    # Fallback: use container ID
+    hostname
+    return 1
+}
+
 echo "---> Starting the MUNGE Authentication service (munged) ..."
 gosu munge /usr/sbin/munged
 
@@ -86,12 +113,6 @@ then
         echo "---> Job completion configured for Elasticsearch"
     fi
 
-    # Sync GPU count in slurm.conf with GPU_COUNT env var
-    if grep -q "Gres=gpu:nvidia:" /etc/slurm/slurm.conf 2>/dev/null; then
-        sed -i "s/Gres=gpu:nvidia:[0-9]*/Gres=gpu:nvidia:${GPU_COUNT:-1}/" /etc/slurm/slurm.conf
-        echo "---> Configured Slurm GPU GRES count to ${GPU_COUNT:-1}"
-    fi
-
     echo "---> Starting the Slurm Controller Daemon (slurmctld) ..."
     exec gosu slurm /usr/sbin/slurmctld -i -Dvvv
 fi
@@ -119,9 +140,9 @@ then
     export SLURM_JWT=daemon; exec gosu slurmrest /usr/sbin/slurmrestd -vvv unix:/var/run/slurmrestd/slurmrestd.socket 0.0.0.0:6820
 fi
 
-if [ "$1" = "slurmd" ]
+if [ "$1" = "slurmd-cpu" ]
 then
-    echo "---> Waiting for slurmctld to become active before starting slurmd..."
+    echo "---> Waiting for slurmctld to become active before starting dynamic slurmd..."
 
     until 2>/dev/null >/dev/tcp/slurmctld/6817
     do
@@ -130,51 +151,46 @@ then
     done
     echo "-- slurmctld is now active ..."
 
-    # Extract container name from cgroup path
-    # Docker Compose sets container name to c1, c2, etc.
-    # We can find this in the cgroup path
-    CONTAINER_NAME=""
+    # Derive a sequential node name from the Docker Compose replica number.
+    # e.g., slurm-cpu-worker-1 -> c1, slurm-cpu-worker-2 -> c2
+    # Falls back to container ID if replica detection fails.
+    REPLICA=$(detect_replica_number "cpu-worker")
+    NODE_NAME="c${REPLICA}"
+    hostname "${NODE_NAME}"
 
-    # Try reading from /proc/self/cgroup (works in cgroup v1 and v2)
-    if [ -f /proc/self/cgroup ]; then
-        # Extract container name from cgroup path
-        # Format: 0::/docker/<container_id> or similar
-        CONTAINER_NAME=$(cat /proc/self/cgroup | sed -n 's|.*/docker/\([^/]*\).*|\1|p' | head -1)
-    fi
+    echo "---> Dynamic CPU worker registering as: ${NODE_NAME}"
+    echo "---> Starting slurmd in dynamic registration mode (-Z)..."
 
-    # If we got a container ID, try to resolve it to a name using the host's /proc
-    if [ -n "$CONTAINER_NAME" ] && [ -d "/host_proc" ]; then
-        # Try to find the container name by looking at cmdline or environ
-        # This is a fallback - we'll use the cgroup container ID to query Docker
-        echo "---> Container ID from cgroup: $CONTAINER_NAME"
-    fi
+    # -Z: dynamic node self-registration with slurmctld
+    # Feature=cpu: tag for cpu partition NodeSet matching
+    exec /usr/sbin/slurmd -Z -Dvvv \
+        --conf "Feature=cpu"
+fi
 
-    # Fallback: try to extract from /proc/1/cpuset which often contains container name
-    if [ -z "$CONTAINER_NAME" ] || [ ${#CONTAINER_NAME} -eq 64 ]; then
-        # We only have a container ID, need the actual name
-        # Try cpuset path which may have the name
-        if [ -f /proc/1/cpuset ]; then
-            CPUSET_PATH=$(cat /proc/1/cpuset)
-            # Extract last component which might be container name
-            CONTAINER_NAME=$(basename "$CPUSET_PATH")
-            echo "---> Container name from cpuset: $CONTAINER_NAME"
-        fi
-    fi
+if [ "$1" = "slurmd-gpu" ]
+then
+    echo "---> Waiting for slurmctld to become active before starting GPU slurmd..."
 
-    # If container name looks like c1, c2, use it directly
-    if [[ "$CONTAINER_NAME" =~ ^c[0-9]+$ ]]; then
-        echo "---> Using container name as hostname: $CONTAINER_NAME"
-        hostname "$CONTAINER_NAME"
-    else
-        echo "---> WARNING: Could not determine proper container name"
-        echo "---> Got: $CONTAINER_NAME"
-        echo "---> Using fallback hostname"
-    fi
+    until 2>/dev/null >/dev/tcp/slurmctld/6817
+    do
+        echo "-- slurmctld is not available.  Sleeping ..."
+        sleep 2
+    done
+    echo "-- slurmctld is now active ..."
 
-    NODE_HOSTNAME=$(hostname)
-    echo "---> Final hostname: $NODE_HOSTNAME"
-    echo "---> Starting the Slurm Node Daemon (slurmd) as $NODE_HOSTNAME..."
-    exec /usr/sbin/slurmd -Dvvv
+    # Derive a sequential node name from the Docker Compose replica number.
+    # e.g., slurm-gpu-worker-1 -> g1, slurm-gpu-worker-2 -> g2
+    # Falls back to container ID if replica detection fails.
+    REPLICA=$(detect_replica_number "gpu-worker")
+    NODE_NAME="g${REPLICA}"
+    hostname "${NODE_NAME}"
+
+    echo "---> Dynamic GPU worker registering as: ${NODE_NAME}"
+    echo "---> Starting slurmd in dynamic GPU registration mode (-Z)..."
+
+    GPU_COUNT=$(ls /dev/nvidia[0-9] 2>/dev/null | wc -l)
+    exec /usr/sbin/slurmd -Z -Dvvv \
+        --conf "Feature=gpu Gres=gpu:nvidia:${GPU_COUNT}"
 fi
 
 exec "$@"

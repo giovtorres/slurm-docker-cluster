@@ -1,4 +1,4 @@
-.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples
+.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples scale-cpu-workers scale-gpu-workers
 
 # Default target
 .DEFAULT_GOAL := help
@@ -36,6 +36,8 @@ help:  ## Show this help message
 	@printf "  ${CYAN}%-20s${RESET} %s\n" "up" "Start containers"
 	@printf "  ${CYAN}%-20s${RESET} %s\n" "down" "Stop containers"
 	@printf "  ${CYAN}%-20s${RESET} %s\n" "clean" "Remove containers and volumes"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "scale-cpu-workers" "Scale CPU workers (requires N=...)"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "scale-gpu-workers" "Scale GPU workers (requires N=...)"
 	@printf "  ${CYAN}%-20s${RESET} %s\n" "rebuild" "Clean, rebuild, and start"
 	@echo ""
 	@echo "Quick Commands:"
@@ -67,6 +69,8 @@ help:  ## Show this help message
 	@echo "Examples:"
 	@echo "  make update-slurm FILES=\"slurm.conf slurmdbd.conf\""
 	@echo "  make set-version VER=24.11.7"
+	@echo "  make scale-cpu-workers N=3"
+	@echo "  make scale-gpu-workers N=2"
 	@echo "  make test-version VER=24.11.7"
 	@echo ""
 	@echo "Monitoring:"
@@ -143,6 +147,48 @@ reload-slurm:  ## Reload Slurm config without restart (after live editing)
 	docker exec slurmctld scontrol reconfigure
 	@echo "✓ Configuration reloaded"
 
+scale-cpu-workers:  ## Scale CPU workers (usage: make scale-cpu-workers N=3)
+	@if [ -z "$(N)" ]; then \
+		echo "Error: N parameter required. Usage: make scale-cpu-workers N=3"; \
+		exit 1; \
+	fi
+	docker compose $(PROFILE_FLAG) up -d --scale cpu-worker=$(N) --no-recreate
+	@echo "Waiting for dynamic workers to register..."; \
+	sleep 10; \
+	LIVE_NODES=$$(docker compose $(PROFILE_FLAG) ps cpu-worker -q 2>/dev/null \
+		| while read cid; do \
+			docker exec "$$cid" hostname 2>/dev/null; \
+		done | sort); \
+	SLURM_NODES=$$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+		| grep -oP 'NodeName=c\d+' | cut -d= -f2 | sort); \
+	STALE_NODES=$$(comm -23 <(echo "$$SLURM_NODES") <(echo "$$LIVE_NODES") | paste -sd, -); \
+	if [ -n "$$STALE_NODES" ]; then \
+		echo "Removing stale dynamic nodes: $$STALE_NODES"; \
+		docker exec slurmctld scontrol delete nodename=$$STALE_NODES; \
+	fi; \
+	docker exec slurmctld sinfo
+
+scale-gpu-workers:  ## Scale GPU workers (usage: make scale-gpu-workers N=2)
+	@if [ -z "$(N)" ]; then \
+		echo "Error: N parameter required. Usage: make scale-gpu-workers N=2"; \
+		exit 1; \
+	fi
+	docker compose --profile gpu $(PROFILE_FLAG) up -d --scale gpu-worker=$(N) --no-recreate
+	@echo "Waiting for dynamic GPU workers to register..."; \
+	sleep 10; \
+	LIVE_NODES=$$(docker compose --profile gpu $(PROFILE_FLAG) ps gpu-worker -q 2>/dev/null \
+		| while read cid; do \
+			docker exec "$$cid" hostname 2>/dev/null; \
+		done | sort); \
+	SLURM_NODES=$$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+		| grep -oP 'NodeName=g\d+' | cut -d= -f2 | sort); \
+	STALE_NODES=$$(comm -23 <(echo "$$SLURM_NODES") <(echo "$$LIVE_NODES") | paste -sd, -); \
+	if [ -n "$$STALE_NODES" ]; then \
+		echo "Removing stale GPU nodes: $$STALE_NODES"; \
+		docker exec slurmctld scontrol delete nodename=$$STALE_NODES; \
+	fi; \
+	docker exec slurmctld sinfo
+
 # Multi-Version Support Targets
 
 version:  ## Show current Slurm version
@@ -216,4 +262,4 @@ test-all:  ## Run test suite against all supported versions
 	echo "✓ All version tests passed!"; \
 	echo "========================================";
 
-rebuild: clean build up
+rebuild: clean build up status
