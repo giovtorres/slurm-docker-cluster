@@ -8,6 +8,28 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
+  build-gpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read config from .env.example
+        id: config
+        run: |
+          echo "slurm_version=$(grep '^SLURM_VERSION=' .env.example | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+          echo "builder_base=$(grep '#BUILDER_BASE=.*nvidia' .env.example | sed 's/^#//' | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+          echo "runtime_base=$(grep '#RUNTIME_BASE=.*nvidia' .env.example | sed 's/^#//' | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Build GPU image
+        run: |
+          docker build \
+            --build-arg SLURM_VERSION=${{ steps.config.outputs.slurm_version }} \
+            --build-arg GPU_ENABLE=true \
+            --build-arg BUILDER_BASE=${{ steps.config.outputs.builder_base }} \
+            --build-arg RUNTIME_BASE=${{ steps.config.outputs.runtime_base }} \
+            .
+
   test-cluster:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
