@@ -131,7 +131,7 @@ make test-monitoring
 
 ## 🎮 GPU Support (NVIDIA)
 
-Enable optional NVIDIA GPU support with dedicated GPU node:
+Enable optional NVIDIA GPU support using [NVIDIA's official CUDA base images](https://hub.docker.com/r/nvidia/cuda/tags):
 
 ```bash
 # 1. One-time host setup (add NVIDIA repo and install nvidia-container-toolkit)
@@ -141,9 +141,10 @@ sudo dnf install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 
-# 2. Enable GPU in .env (CUDA toolkit installed in container automatically)
+# 2. Enable GPU in .env (uses NVIDIA's official CUDA base images)
 GPU_ENABLE=true
-CUDA_VERSION=12.6  # Optional, defaults to 12.6
+BUILDER_BASE=nvidia/cuda:13.1.1-devel-rockylinux9
+RUNTIME_BASE=nvidia/cuda:13.1.1-base-rockylinux9
 
 # 3. Build with GPU support
 make rebuild
