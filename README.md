@@ -28,7 +28,7 @@ make test               # run full test suite
 make help               # see all available commands
 ```
 
-**Supported Slurm versions:** 25.11.x, 25.05.x, 24.11.x
+**Supported Slurm versions:** 25.11.x, 25.05.x (last two Major.Minor releases)
 
 **Supported architectures (auto-detected):** AMD64, ARM64
 
@@ -99,7 +99,7 @@ Verify with `make status`.
 
 ### REST API
 
-Query cluster via REST API (version auto-detected: v0.0.44 for 25.11.x, v0.0.42 for 25.05.x, v0.0.41 for 24.11.x):
+Query cluster via REST API (version auto-detected: v0.0.44 for 25.11.x, v0.0.42 for 25.05.x):
 
 ```bash
 # Get JWT Token
@@ -198,7 +198,7 @@ docker pull giovtorres/slurm-docker-cluster:25.11.2-gpu-2.1.0
 ### Version Management
 
 ```bash
-make set-version VER=24.11.6   # Switch Slurm version
+make set-version VER=25.05.6   # Switch Slurm version
 make version                   # Show current version
 make build-all                 # Build all supported versions
 make test-all                  # Test all versions
