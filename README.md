@@ -14,7 +14,15 @@ git clone https://github.com/giovtorres/slurm-docker-cluster.git
 cd slurm-docker-cluster
 cp .env.example .env    # optional: edit to change version, enable GPU, etc.
 
-make up                 # build and start the cluster
+# Option A: Pull pre-built image from Docker Hub (fastest)
+docker pull giovtorres/slurm-docker-cluster:latest
+docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:25.11.2
+
+# Option B: Build from source
+make build
+
+# Start the cluster
+make up
 make status             # verify nodes are idle
 make test               # run full test suite
 make help               # see all available commands
@@ -168,6 +176,22 @@ make logs     # View container logs
 ```
 
 > **Note:** If `ELASTICSEARCH_HOST` is set in `.env`, monitoring containers are automatically managed.
+
+## 🐳 Docker Hub
+
+Pre-built multi-arch images (amd64 + arm64) are published on each [GitHub release](https://github.com/giovtorres/slurm-docker-cluster/releases):
+
+```bash
+# CPU images
+docker pull giovtorres/slurm-docker-cluster:latest
+docker pull giovtorres/slurm-docker-cluster:25.11.2          # latest build for this Slurm version
+docker pull giovtorres/slurm-docker-cluster:25.11.2-2.1.0   # pinned to a specific release
+
+# GPU images (built on nvidia/cuda base)
+docker pull giovtorres/slurm-docker-cluster:latest-gpu
+docker pull giovtorres/slurm-docker-cluster:25.11.2-gpu
+docker pull giovtorres/slurm-docker-cluster:25.11.2-gpu-2.1.0
+```
 
 ## ⚙️ Advanced
 
