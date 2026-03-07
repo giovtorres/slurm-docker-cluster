@@ -212,8 +212,8 @@ RUN set -ex \
          echo "Using version-specific config for ${MAJOR_MINOR}"; \
          cp /tmp/slurm-config/${MAJOR_MINOR}/slurm.conf /etc/slurm/slurm.conf; \
        else \
-         echo "No version-specific config found for ${MAJOR_MINOR}, using latest (25.05)"; \
-         cp /tmp/slurm-config/25.05/slurm.conf /etc/slurm/slurm.conf; \
+         echo "No version-specific config found for ${MAJOR_MINOR}, using latest (25.11)"; \
+         cp /tmp/slurm-config/25.11/slurm.conf /etc/slurm/slurm.conf; \
        fi \
     && cp /tmp/slurm-config/common/slurmdbd.conf /etc/slurm/slurmdbd.conf \
     && if [ -f "/tmp/slurm-config/${MAJOR_MINOR}/cgroup.conf" ]; then \

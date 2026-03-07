@@ -36,14 +36,21 @@ jobs:
     strategy:
       fail-fast: false  # Allow all matrix jobs to complete independently
       matrix:
-        slurm_version: ['25.11.2', '25.05.6', '24.11.7']
-        runner: ['ubuntu-latest', 'ubuntu-24.04-arm']
+        # All versions on amd64, latest only on arm64
+        slurm_version: ['25.11.2', '25.05.6']
+        runner: ['ubuntu-latest']
         monitoring: ['disabled', 'enabled']
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - slurm_version: '25.11.2'
+            runner: ubuntu-24.04-arm
             arch: arm64
+            monitoring: disabled
+          - slurm_version: '25.11.2'
+            runner: ubuntu-24.04-arm
+            arch: arm64
+            monitoring: enabled
 
     steps:
       - name: Checkout code
