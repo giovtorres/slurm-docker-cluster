@@ -3,16 +3,18 @@
 # Stage 2: Install RPMs in a clean runtime image
 
 ARG SLURM_VERSION
+# BUILDER_BASE and RUNTIME_BASE overridden when GPU_ENABLE=true is set in .env
+ARG BUILDER_BASE=rockylinux/rockylinux:9
+ARG RUNTIME_BASE=rockylinux/rockylinux:9
 
 # ============================================================================
 # Stage 1: Build RPMs
 # ============================================================================
-FROM rockylinux/rockylinux:9 AS builder
+FROM ${BUILDER_BASE} AS builder
 
 ARG SLURM_VERSION
 ARG TARGETARCH
 ARG GPU_ENABLE
-ARG CUDA_VERSION
 
 # Enable CRB and EPEL repositories for development packages
 # Install RPM build tools and dependencies
@@ -67,19 +69,13 @@ RUN rpmdev-setuptree
 # Copy RPM macros
 COPY rpmbuild/slurm.rpmmacros /root/.rpmmacros
 
-# Conditionally install NVML devel and enable --with-nvml for GPU-aware Slurm build
-# Must run before rpmbuild so configure can find the NVML headers.
+# When GPU_ENABLE=true, the builder base image (nvidia/cuda:*-devel-*) provides
+# NVML headers. Symlink them to standard paths and enable --with-nvml for rpmbuild.
 RUN if [ "${GPU_ENABLE}" = "true" ]; then \
         set -ex && \
-        CUDA_ARCH=$(case "${TARGETARCH}" in amd64) echo "x86_64" ;; arm64) echo "sbsa" ;; *) echo "x86_64" ;; esac) && \
-        dnf config-manager --add-repo "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/${CUDA_ARCH}/cuda-rhel9.repo" && \
-        dnf install -y "cuda-nvml-devel-$(echo ${CUDA_VERSION} | tr '.' '-')" && \
-        dnf clean all && \
-        rm -rf /var/cache/dnf && \
-        NVML_H=$(find /usr/local -name nvml.h 2>/dev/null | head -1) && \
-        NVML_SO=$(find /usr/local -name 'libnvidia-ml.so' 2>/dev/null | head -1) && \
-        ln -sf "$NVML_H" /usr/include/nvml.h && \
-        ln -sf "$NVML_SO" /usr/lib64/libnvidia-ml.so && \
+        CUDA_TARGET=$(case "${TARGETARCH}" in amd64) echo "x86_64-linux" ;; arm64) echo "sbsa-linux" ;; esac) && \
+        ln -sf /usr/local/cuda/include/nvml.h /usr/include/nvml.h && \
+        ln -sf /usr/local/cuda/targets/${CUDA_TARGET}/lib/stubs/libnvidia-ml.so /usr/lib64/libnvidia-ml.so && \
         echo "%_with_nvml --with-nvml=/usr" >> /root/.rpmmacros; \
     fi
 
@@ -101,7 +97,7 @@ RUN set -ex \
 # ============================================================================
 # Stage 2: Runtime image
 # ============================================================================
-FROM rockylinux/rockylinux:9
+FROM ${RUNTIME_BASE}
 
 LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docker-cluster" \
       org.opencontainers.image.title="slurm-docker-cluster" \
@@ -111,7 +107,6 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
 ARG SLURM_VERSION
 ARG TARGETARCH
 ARG GPU_ENABLE
-ARG CUDA_VERSION
 
 # Enable CRB and EPEL repositories, then install runtime dependencies
 RUN set -ex \
@@ -171,24 +166,6 @@ RUN set -ex \
     && chmod +x /usr/local/bin/gosu \
     && gosu --version \
     && gosu nobody true
-
-# Conditionally install CUDA toolkit for GPU support
-RUN if [ "$GPU_ENABLE" = "true" ]; then \
-      set -ex && \
-      echo "Installing CUDA ${CUDA_VERSION} runtime for GPU support..." && \
-      dnf config-manager --add-repo \
-        https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-      dnf -y install \
-        cuda-nvml-devel-$(echo ${CUDA_VERSION} | tr '.' '-') \
-        cuda-cudart-$(echo ${CUDA_VERSION} | tr '.' '-') \
-        cuda-nvcc-$(echo ${CUDA_VERSION} | tr '.' '-') \
-        nvidia-driver-cuda-libs && \
-      dnf clean all && \
-      rm -rf /var/cache/dnf && \
-      echo "CUDA ${CUDA_VERSION} installed successfully"; \
-    else \
-      echo "GPU support disabled, skipping CUDA installation"; \
-    fi
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 

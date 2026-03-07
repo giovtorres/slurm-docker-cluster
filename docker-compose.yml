@@ -26,7 +26,8 @@ services:
       args:
         SLURM_VERSION: ${SLURM_VERSION:-25.11.2}
         GPU_ENABLE: ${GPU_ENABLE:-false}
-        CUDA_VERSION: ${CUDA_VERSION:-12.6}
+        BUILDER_BASE: ${BUILDER_BASE:-rockylinux/rockylinux:9}
+        RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
       cache_from:
         - slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
     command: ["slurmdbd"]
