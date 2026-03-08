@@ -118,7 +118,7 @@ services:
     working_dir: /data
     privileged: true
     environment:
-      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm-docker-cluster}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -149,7 +149,7 @@ services:
     privileged: true
     profiles: ["gpu"]
     environment:
-      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm-docker-cluster}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
