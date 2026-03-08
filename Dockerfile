@@ -1,14 +1,37 @@
 # Multi-stage Dockerfile for Slurm runtime
-# Stage 1: Build RPMs using the builder image
-# Stage 2: Install RPMs in a clean runtime image
+# Stage 1: Build gosu from source with latest Go (avoids CVEs in pre-built binaries)
+# Stage 2: Build RPMs using the builder image
+# Stage 3: Install RPMs in a clean runtime image
 
 ARG SLURM_VERSION
+ARG GOSU_VERSION=1.19
 # BUILDER_BASE and RUNTIME_BASE overridden when GPU_ENABLE=true is set in .env
 ARG BUILDER_BASE=rockylinux/rockylinux:9
 ARG RUNTIME_BASE=rockylinux/rockylinux:9
 
 # ============================================================================
-# Stage 1: Build RPMs
+# Stage 1: Build gosu from source
+# (pre-built binaries use an old Go version that triggers CVEs)
+# https://github.com/tianon/gosu/issues/136
+# ============================================================================
+FROM golang:1.26-bookworm AS gosu-builder
+
+ARG GOSU_VERSION
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN set -ex \
+    && git clone --branch ${GOSU_VERSION} --depth 1 \
+       https://github.com/tianon/gosu.git /go/src/github.com/tianon/gosu \
+    && cd /go/src/github.com/tianon/gosu \
+    && go mod download \
+    && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+       go build -v -trimpath -ldflags '-d -w' \
+       -o /go/bin/gosu . \
+    && chmod +x /go/bin/gosu
+
+# ============================================================================
+# Stage 2: Build RPMs
 # ============================================================================
 FROM ${BUILDER_BASE} AS builder
 
@@ -95,7 +118,7 @@ RUN set -ex \
     && ls -lh /root/rpmbuild/RPMS/${RPM_ARCH}/
 
 # ============================================================================
-# Stage 2: Runtime image
+# Stage 3: Runtime image
 # ============================================================================
 FROM ${RUNTIME_BASE}
 
@@ -148,24 +171,9 @@ RUN set -ex \
     && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
-# Install gosu for privilege dropping
-ARG GOSU_VERSION=1.19
-# Official SHA256 checksums from https://github.com/tianon/gosu/releases/download/1.19/SHA256SUMS
-ARG GOSU_SHA256_AMD64=52c8749d0142edd234e9d6bd5237dff2d81e71f43537e2f4f66f75dd4b243dd0
-ARG GOSU_SHA256_ARM64=3a8ef022d82c0bc4a98bcb144e77da714c25fcfa64dccc57f6aba7ae47ff1a44
-
-RUN set -ex \
-    && echo "Installing gosu ${GOSU_VERSION} for architecture: ${TARGETARCH}" \
-    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-${TARGETARCH}" \
-    && EXPECTED_SHA256=$(case "${TARGETARCH}" in \
-         amd64) echo "${GOSU_SHA256_AMD64}" ;; \
-         arm64) echo "${GOSU_SHA256_ARM64}" ;; \
-         *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
-       esac) \
-    && echo "${EXPECTED_SHA256}  /usr/local/bin/gosu" | sha256sum -c - \
-    && chmod +x /usr/local/bin/gosu \
-    && gosu --version \
-    && gosu nobody true
+# Install gosu (built from source in stage 1)
+COPY --from=gosu-builder /go/bin/gosu /usr/local/bin/gosu
+RUN gosu --version && gosu nobody true
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
