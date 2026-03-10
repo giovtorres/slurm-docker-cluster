@@ -285,11 +285,99 @@ test_job_execution() {
 test_job_accounting() {
     print_test "Testing job accounting..."
 
-    # Check if sacct can retrieve job history
-    if docker exec slurmctld sacct -n --format=JobID -X 2>/dev/null | grep -q "[0-9]"; then
-        print_pass "Job accounting is working"
+    # Submit a known job and wait for it to complete
+    JOB_ID=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='echo ACCT_TEST' --job-name=acct_test --wait 2>&1" \
+        | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
+
+    if [ -z "$JOB_ID" ]; then
+        print_fail "Failed to submit accounting test job"
+        return 1
+    fi
+
+    print_info "  Submitted job $JOB_ID, waiting for accounting data..."
+
+    # sacct data can lag briefly; poll for up to 15 seconds
+    ACCT_LINE=""
+    for i in $(seq 1 15); do
+        ACCT_LINE=$(docker exec slurmctld sacct -j "$JOB_ID" -X -n -P \
+            --format=JobID,JobName,User,Partition,State,ExitCode,NodeList 2>/dev/null || true)
+        if [ -n "$ACCT_LINE" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -z "$ACCT_LINE" ]; then
+        print_fail "Job $JOB_ID not found in sacct after 15 seconds"
+        return 1
+    fi
+
+    print_info "  sacct: $ACCT_LINE"
+
+    ALL_GOOD=true
+
+    # Verify each field (pipe-delimited: JobID|JobName|User|Partition|State|ExitCode|NodeList)
+    FIELD_JOBID=$(echo "$ACCT_LINE" | cut -d'|' -f1)
+    FIELD_NAME=$(echo "$ACCT_LINE" | cut -d'|' -f2)
+    FIELD_USER=$(echo "$ACCT_LINE" | cut -d'|' -f3)
+    FIELD_PARTITION=$(echo "$ACCT_LINE" | cut -d'|' -f4)
+    FIELD_STATE=$(echo "$ACCT_LINE" | cut -d'|' -f5)
+    FIELD_EXIT=$(echo "$ACCT_LINE" | cut -d'|' -f6)
+    FIELD_NODE=$(echo "$ACCT_LINE" | cut -d'|' -f7)
+
+    if [ "$FIELD_JOBID" = "$JOB_ID" ]; then
+        print_info "  ✓ JobID matches ($FIELD_JOBID)"
     else
-        print_fail "Job accounting failed - no jobs recorded"
+        print_fail "  JobID mismatch: expected $JOB_ID, got $FIELD_JOBID"
+        ALL_GOOD=false
+    fi
+
+    if [ "$FIELD_NAME" = "acct_test" ]; then
+        print_info "  ✓ JobName matches (acct_test)"
+    else
+        print_fail "  JobName mismatch: expected acct_test, got $FIELD_NAME"
+        ALL_GOOD=false
+    fi
+
+    if [ -n "$FIELD_USER" ]; then
+        print_info "  ✓ User recorded ($FIELD_USER)"
+    else
+        print_fail "  User field is empty"
+        ALL_GOOD=false
+    fi
+
+    if [ "$FIELD_PARTITION" = "cpu" ]; then
+        print_info "  ✓ Partition matches (cpu)"
+    else
+        print_fail "  Partition mismatch: expected cpu, got $FIELD_PARTITION"
+        ALL_GOOD=false
+    fi
+
+    if [ "$FIELD_STATE" = "COMPLETED" ]; then
+        print_info "  ✓ State is COMPLETED"
+    else
+        print_fail "  State mismatch: expected COMPLETED, got $FIELD_STATE"
+        ALL_GOOD=false
+    fi
+
+    if [ "$FIELD_EXIT" = "0:0" ]; then
+        print_info "  ✓ ExitCode is 0:0"
+    else
+        print_fail "  ExitCode mismatch: expected 0:0, got $FIELD_EXIT"
+        ALL_GOOD=false
+    fi
+
+    if echo "$FIELD_NODE" | grep -qP '^c\d+$'; then
+        print_info "  ✓ NodeList is valid ($FIELD_NODE)"
+    else
+        print_fail "  NodeList unexpected: $FIELD_NODE"
+        ALL_GOOD=false
+    fi
+
+    if [ "$ALL_GOOD" = true ]; then
+        print_pass "Job accounting verified (job $JOB_ID: all fields correct)"
+    else
+        print_fail "Job accounting has field mismatches"
         return 1
     fi
 }
