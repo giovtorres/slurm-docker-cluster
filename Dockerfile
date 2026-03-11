@@ -224,6 +224,7 @@ RUN set -ex \
          cp /tmp/slurm-config/25.11/slurm.conf /etc/slurm/slurm.conf; \
        fi \
     && cp /tmp/slurm-config/common/slurmdbd.conf /etc/slurm/slurmdbd.conf \
+    && cp /tmp/slurm-config/common/job_submit.lua /etc/slurm/job_submit.lua \
     && if [ -f "/tmp/slurm-config/${MAJOR_MINOR}/cgroup.conf" ]; then \
          echo "Using version-specific cgroup.conf for ${MAJOR_MINOR}"; \
          cp /tmp/slurm-config/${MAJOR_MINOR}/cgroup.conf /etc/slurm/cgroup.conf; \
@@ -239,7 +240,7 @@ RUN set -ex \
        else \
          echo "GPU support disabled, skipping gres.conf"; \
        fi \
-    && chown slurm:slurm /etc/slurm/slurm.conf /etc/slurm/cgroup.conf /etc/slurm/slurmdbd.conf \
+    && chown slurm:slurm /etc/slurm/slurm.conf /etc/slurm/cgroup.conf /etc/slurm/slurmdbd.conf /etc/slurm/job_submit.lua \
     && chmod 644 /etc/slurm/slurm.conf /etc/slurm/cgroup.conf \
     && chmod 600 /etc/slurm/slurmdbd.conf \
     && rm -rf /tmp/slurm-config
