@@ -22,3 +22,6 @@
 
 # Disable InfiniBand/OFED support (not available on ARM64 and not needed for Docker-based testing)
 %_without_ofed 1
+
+# Enable Lua for Plugins
+%_with_lua --with-lua=/usr
