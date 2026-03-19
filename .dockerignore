@@ -1,0 +1,41 @@
+# Git files
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Python virtual environments and caches
+venv/
+.mypy_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Development
+*.log
+
+# Documentation and README files
+*.md
+readme/
+
+# Build and development scripts
+Makefile
+test_cluster.sh
+run_examples.sh
+update_slurmfiles.sh
+
+# Environment files (these should be set at build time via --build-arg)
+.env
+.env.example
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

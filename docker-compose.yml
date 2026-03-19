@@ -20,13 +20,16 @@ services:
       start_period: 30s
 
   slurmdbd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
     build:
       context: .
       args:
-        SLURM_VERSION: ${SLURM_VERSION:-25.05.3}
+        SLURM_VERSION: ${SLURM_VERSION:-25.11.2}
+        GPU_ENABLE: ${GPU_ENABLE:-false}
+        BUILDER_BASE: ${BUILDER_BASE:-rockylinux/rockylinux:9}
+        RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
       cache_from:
-        - slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+        - slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
@@ -52,17 +55,23 @@ services:
       start_period: 20s
 
   slurmctld:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
     privileged: true
     working_dir: /data
+    environment:
+      ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST:-}
+      SSH_ENABLE: ${SSH_ENABLE:-false}
     volumes:
       - etc_munge:/etc/munge:z
       - etc_slurm:/etc/slurm:z
       - slurm_jobdir:/data:z
       - var_log_slurm:/var/log/slurm:z
+      - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/tmp/authorized_keys_host:ro,z
+    ports:
+      - "${SSH_PORT:-3022}:22"
     expose:
       - "6817"
     depends_on:
@@ -78,7 +87,7 @@ services:
       start_period: 20s
 
   slurmrestd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
     command: ["slurmrestd"]
     container_name: slurmrestd
     hostname: slurmrestd
@@ -103,13 +112,13 @@ services:
       retries: 3
       start_period: 20s
 
-  c1:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
-    command: ["slurmd"]
-    container_name: c1
-    hostname: c1
+  cpu-worker:
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    command: ["slurmd-cpu"]
     working_dir: /data
     privileged: true
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -128,14 +137,19 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    deploy:
+      replicas: ${CPU_WORKER_COUNT:-2}
 
-  c2:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.05.3}
-    command: ["slurmd"]
-    container_name: c2
-    hostname: c2
+  # GPU compute node (NVIDIA)
+  # Requires: GPU_ENABLE=true in .env and nvidia-container-toolkit installed on host
+  gpu-worker:
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    command: ["slurmd-gpu"]
     working_dir: /data
     privileged: true
+    profiles: ["gpu"]
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-slurm}
     volumes:
       - etc_munge:/etc/munge
       - etc_slurm:/etc/slurm
@@ -154,6 +168,61 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    deploy:
+      replicas: ${GPU_WORKER_COUNT:-1}
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility]
+
+  # Optional Elasticsearch for job completion logging
+  # Start with: docker compose --profile monitoring up -d
+  #   or with: make up-with-monitoring
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    profiles: ["monitoring"]
+    container_name: elasticsearch
+    hostname: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    expose:
+      - "9200"
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Kibana for visualizing Elasticsearch job completions
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.3.0
+    profiles: ["monitoring"]
+    container_name: kibana
+    hostname: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
 volumes:
   etc_munge:
@@ -161,6 +230,7 @@ volumes:
   slurm_jobdir:
   var_lib_mysql:
   var_log_slurm:
+  elasticsearch_data:
 
 networks:
   slurm-network:

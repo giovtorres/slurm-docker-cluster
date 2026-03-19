@@ -1,13 +1,26 @@
-.PHONY: help build up start down clean logs test status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version \
-	playground-init playground-start playground-stop playground-reset playground-shell playground-logs playground-metrics playground-scale playground-workload \
-	awx-up awx-down awx-setup awx-status awx-logs awx-clean
+.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples scale-cpu-workers scale-gpu-workers
 
 # Default target
 .DEFAULT_GOAL := help
 
 # Supported Slurm versions
-SUPPORTED_VERSIONS := 24.11.6 25.05.3
-DEFAULT_VERSION := 25.05.3
+SUPPORTED_VERSIONS := 25.05.6 25.11.2
+# Read default version from .env.example (source of truth)
+DEFAULT_VERSION := $(shell grep '^SLURM_VERSION=' .env.example | cut -d= -f2)
+
+# Auto-detect profiles based on .env configuration
+ELASTICSEARCH_HOST := $(shell grep -E '^ELASTICSEARCH_HOST=' .env 2>/dev/null | cut -d= -f2)
+GPU_ENABLE := $(shell grep -E '^GPU_ENABLE=' .env 2>/dev/null | cut -d= -f2)
+
+# Build profile flags
+PROFILES :=
+ifdef ELASTICSEARCH_HOST
+    PROFILES += --profile monitoring
+endif
+ifeq ($(GPU_ENABLE),true)
+    PROFILES += --profile gpu
+endif
+PROFILE_FLAG := $(PROFILES)
 
 # Colors for help output
 CYAN := $(shell tput -Txterm setaf 6)
@@ -18,11 +31,14 @@ help:  ## Show this help message
 	@echo "=========================================="
 	@echo ""
 	@echo "Cluster Management:"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "build" "Build Docker images"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "up" "Start containers"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "down" "Stop containers"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "clean" "Remove containers and volumes"
-	@printf "  ${CYAN}%-15s${RESET} %s\n" "rebuild" "Clean, rebuild, and start"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "build" "Build Docker images"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "build-no-cache" "Build Docker images without cache"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "up" "Start containers"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "down" "Stop containers"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "clean" "Remove containers and volumes"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "scale-cpu-workers" "Scale CPU workers (requires N=...)"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "scale-gpu-workers" "Scale GPU workers (requires N=...)"
+	@printf "  ${CYAN}%-20s${RESET} %s\n" "rebuild" "Clean, rebuild, and start"
 	@echo ""
 	@echo "Quick Commands:"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "jobs" "View job queue"
@@ -38,6 +54,8 @@ help:  ## Show this help message
 	@echo "Development & Testing:"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "shell" "Open shell in slurmctld"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test" "Run test suite"
+	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-monitoring" "Run monitoring profile tests"
+	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-gpu" "Run GPU profile tests"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "quick-test" "Submit a quick test job"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "run-examples" "Run example jobs"
 	@echo ""
@@ -72,24 +90,45 @@ help:  ## Show this help message
 	@echo "  make test-version VER=24.11.6"
 	@echo "  make playground-start NODES=10"
 	@echo "  make playground-start PROFILE=medium"
+	@echo "  make set-version VER=25.05.6"
+	@echo "  make scale-cpu-workers N=3"
+	@echo "  make scale-gpu-workers N=2"
+	@echo "  make test-version VER=25.05.6"
+	@echo ""
+	@echo "Monitoring:"
+	@echo "  Enable:  Set ELASTICSEARCH_HOST=http://elasticsearch:9200 in .env"
+	@echo "  Disable: Comment out or remove ELASTICSEARCH_HOST from .env"
+	@echo ""
+	@echo "GPU Support (NVIDIA):"
+	@echo "  Enable:  Set GPU_ENABLE=true in .env (requires nvidia-container-toolkit on host)"
+	@echo "  Disable: Set GPU_ENABLE=false or remove GPU_ENABLE from .env"
 
 build:  ## Build Docker images
 	docker compose --progress plain build
 
-up:  ## Start containers
-	docker compose up -d
+build-no-cache:  ## Build Docker images without cache
+	docker compose --progress plain build --no-cache
+
+up:  ## Start containers (auto-enables monitoring if ELASTICSEARCH_HOST is set in .env)
+	docker compose $(PROFILE_FLAG) up -d
 
 down:  ## Stop containers
-	docker compose down
+	docker compose $(PROFILE_FLAG) down
 
 clean:  ## Remove containers and volumes
-	docker compose down -v
+	docker compose $(PROFILE_FLAG) down -v
 
 logs:  ## Show container logs
 	docker compose logs -f
 
 test:  ## Run test suite
 	./test_cluster.sh
+
+test-monitoring:  ## Run monitoring profile test suite
+	./test_monitoring.sh
+
+test-gpu:  ## Run GPU profile test suite
+	./test_gpu.sh
 
 status:  ## Show cluster status
 	@echo "=== Containers ==="
@@ -130,6 +169,48 @@ reload-slurm:  ## Reload Slurm config without restart (after live editing)
 	docker exec slurmctld scontrol reconfigure
 	@echo "✓ Configuration reloaded"
 
+scale-cpu-workers:  ## Scale CPU workers (usage: make scale-cpu-workers N=3)
+	@if [ -z "$(N)" ]; then \
+		echo "Error: N parameter required. Usage: make scale-cpu-workers N=3"; \
+		exit 1; \
+	fi
+	docker compose $(PROFILE_FLAG) up -d --scale cpu-worker=$(N) --no-recreate
+	@echo "Waiting for dynamic workers to register..."; \
+	sleep 10; \
+	LIVE_NODES=$$(docker compose $(PROFILE_FLAG) ps cpu-worker -q 2>/dev/null \
+		| while read cid; do \
+			docker exec "$$cid" hostname 2>/dev/null; \
+		done | sort); \
+	SLURM_NODES=$$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+		| grep -oP 'NodeName=c\d+' | cut -d= -f2 | sort); \
+	STALE_NODES=$$(comm -23 <(echo "$$SLURM_NODES") <(echo "$$LIVE_NODES") | paste -sd, -); \
+	if [ -n "$$STALE_NODES" ]; then \
+		echo "Removing stale dynamic nodes: $$STALE_NODES"; \
+		docker exec slurmctld scontrol delete nodename=$$STALE_NODES; \
+	fi; \
+	docker exec slurmctld sinfo
+
+scale-gpu-workers:  ## Scale GPU workers (usage: make scale-gpu-workers N=2)
+	@if [ -z "$(N)" ]; then \
+		echo "Error: N parameter required. Usage: make scale-gpu-workers N=2"; \
+		exit 1; \
+	fi
+	docker compose --profile gpu $(PROFILE_FLAG) up -d --scale gpu-worker=$(N) --no-recreate
+	@echo "Waiting for dynamic GPU workers to register..."; \
+	sleep 10; \
+	LIVE_NODES=$$(docker compose --profile gpu $(PROFILE_FLAG) ps gpu-worker -q 2>/dev/null \
+		| while read cid; do \
+			docker exec "$$cid" hostname 2>/dev/null; \
+		done | sort); \
+	SLURM_NODES=$$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+		| grep -oP 'NodeName=g\d+' | cut -d= -f2 | sort); \
+	STALE_NODES=$$(comm -23 <(echo "$$SLURM_NODES") <(echo "$$LIVE_NODES") | paste -sd, -); \
+	if [ -n "$$STALE_NODES" ]; then \
+		echo "Removing stale GPU nodes: $$STALE_NODES"; \
+		docker exec slurmctld scontrol delete nodename=$$STALE_NODES; \
+	fi; \
+	docker exec slurmctld sinfo
+
 # Multi-Version Support Targets
 
 version:  ## Show current Slurm version
@@ -139,9 +220,9 @@ version:  ## Show current Slurm version
 		echo "No .env file found (default: $(DEFAULT_VERSION))"; \
 	fi
 
-set-version:  ## Set Slurm version (usage: make set-version VER=24.11.6)
+set-version:  ## Set Slurm version (usage: make set-version VER=25.05.6)
 	@if [ -z "$(VER)" ]; then \
-		echo "Error: VER parameter required. Usage: make set-version VER=24.11.6"; \
+		echo "Error: VER parameter required. Usage: make set-version VER=25.05.6"; \
 		echo "Supported versions: $(SUPPORTED_VERSIONS)"; \
 		exit 1; \
 	fi
@@ -166,9 +247,9 @@ build-all:  ## Build Docker images for all supported versions
 	echo "========================================"; \
 	docker images | grep slurm-docker-cluster
 
-test-version:  ## Test a specific version (usage: make test-version VER=24.11.6)
+test-version:  ## Test a specific version (usage: make test-version VER=25.05.6)
 	@if [ -z "$(VER)" ]; then \
-		echo "Error: VER parameter required. Usage: make test-version VER=24.11.6"; \
+		echo "Error: VER parameter required. Usage: make test-version VER=25.05.6"; \
 		echo "Supported versions: $(SUPPORTED_VERSIONS)"; \
 		exit 1; \
 	fi
@@ -347,3 +428,4 @@ awx-clean:  ## Remove AWX containers, volumes, and credentials (DESTRUCTIVE!)
 	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
 	@cd awx && ./setup_awx.sh --clean
 	@echo "✓ AWX cleaned"
+rebuild: clean build up status

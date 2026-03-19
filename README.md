@@ -1,394 +1,241 @@
 # Slurm Docker Cluster
 
-<p align="center">
-    <b> English | <a href="./readme/README_CN.md">简体中文</a> </b>
-</p>
-
 **Slurm Docker Cluster** is a multi-container Slurm cluster designed for rapid
 deployment using Docker Compose. This repository simplifies the process of
 setting up a robust Slurm environment for development, testing, or lightweight
 usage.
 
-## 🏁 Getting Started
+## 🏁 Quick Start
 
-To get up and running with Slurm in Docker, make sure you have the following tools installed:
-
-- **[Docker](https://docs.docker.com/get-docker/)**
-- **[Docker Compose](https://docs.docker.com/compose/install/)**
-
-Clone the repository:
+**Requirements:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 
 ```bash
 git clone https://github.com/giovtorres/slurm-docker-cluster.git
 cd slurm-docker-cluster
-```
+cp .env.example .env    # optional: edit to change version, enable GPU, etc.
 
-## 🔢 Choosing Your Slurm Version
+# Option A: Pull pre-built image from Docker Hub (fastest)
+docker pull giovtorres/slurm-docker-cluster:latest
+docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:25.11.2
 
-This project supports multiple Slurm versions. To select your version, copy `.env.example` to `.env` and set `SLURM_VERSION`:
-
-```bash
-cp .env.example .env
-# Edit .env and set:
-SLURM_VERSION=25.05.3   # Latest stable (default)
-# Or:
-SLURM_VERSION=24.11.6   # Previous stable release
-```
-
-**Supported versions:** 25.05.x, 24.11.x
-
-## 🏗️ Architecture Support
-
-This project supports both **AMD64 (x86_64)** and **ARM64 (aarch64)**
-architectures. The build system automatically detects your architecture. No
-special configuration is needed - simply build and run:
-
-```bash
-make build
-make up
-```
-
-## 🚀 Quick Start (Using Make)
-
-The easiest way to get started is using the provided Makefile:
-
-```bash
-# Build and start the cluster
-make up
-
-# Run tests to verify everything works
-make test
-
-# View cluster status
-make status
-```
-
-See all available commands:
-```bash
-make help
-```
-
-## 📦 Containers and Volumes
-
-This setup consists of the following containers:
-
-- **mysql**: Stores job and cluster data.
-- **slurmdbd**: Manages the Slurm database.
-- **slurmctld**: The Slurm controller responsible for job and resource management.
-- **slurmrestd**: REST API daemon for HTTP/JSON access to the cluster.
-- **c1, c2**: Compute nodes (running `slurmd`).
-
-### Persistent Volumes:
-
-- `etc_munge`: Mounted to `/etc/munge` - Authentication keys
-- `etc_slurm`: Mounted to `/etc/slurm` - Configuration files (allows live editing)
-- `slurm_jobdir`: Mounted to `/data` - Job files shared across all nodes
-- `var_lib_mysql`: Mounted to `/var/lib/mysql` - Database persistence
-- `var_log_slurm`: Mounted to `/var/log/slurm` - Log files
-
-## 🛠️ Building and Starting the Cluster
-
-### Building
-
-The easiest way to build and start the cluster is using Make:
-
-```bash
-# Build images with default version (25.05.3)
+# Option B: Build from source
 make build
 
-# Or build and start in one command
+# Start the cluster
 make up
+make status             # verify nodes are idle
+make test               # run full test suite
+make help               # see all available commands
 ```
 
-To build a different version, update `SLURM_VERSION` in `.env`:
+**Supported Slurm versions:** 25.11.x, 25.05.x (last two Major.Minor releases)
 
-```bash
-make set-version VER=24.11.6
+**Supported architectures (auto-detected):** AMD64, ARM64
 
-# Build
-make build
-```
+## 📦 What's Included
 
-Alternatively, use Docker Compose directly:
+**Containers:**
 
-```bash
-docker compose build
-```
+- **mysql** - Job and cluster database
+- **slurmdbd** - Database daemon for accounting
+- **slurmctld** - Controller for job scheduling
+- **slurmrestd** - REST API daemon (HTTP/JSON access)
+- **c1, c2** - CPU compute nodes (dynamically scalable)
+- **g1** - (optional) GPU compute node with NVIDIA support (dynamically scalable)
+- **elasticsearch** - (optional) indexing jobs
+- **kibana** - (optional) visualization for elasticsearch
 
-### Starting
+**Persistent volumes:**
 
-Start the cluster in detached mode:
-
-```bash
-make up
-```
-
-Check cluster status:
-
-```bash
-make status
-```
-
-View logs:
-
-```bash
-make logs
-```
-
-> **Note**: The cluster automatically registers itself with SlurmDBD on first startup. Wait about 15-20 seconds after starting for all services to become healthy and auto-register.
+- Configuration (`etc_slurm`)
+- Logs (`var_log_slurm`)
+- Job files (`slurm_jobdir`)
+- Database (`var_lib_mysql`)
+- Authentication (`etc_munge`)
 
 ## 🖥️ Using the Cluster
 
-### Accessing the Controller
-
-Open a shell in the Slurm controller:
-
 ```bash
+# Access controller
 make shell
-# Or: docker exec -it slurmctld bash
-```
 
-Check cluster status:
+# Inside controller:
+sinfo                          # View cluster status
+sbatch --wrap="hostname"       # Submit job
+squeue                         # View queue
+sacct                          # View accounting
 
-```bash
-[root@slurmctld /]# sinfo
-PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-normal*      up   infinite      2   idle c[1-2]
-```
-
-### Submitting Jobs
-
-The `/data` directory is shared across all nodes for job files:
-
-```bash
-[root@slurmctld /]# cd /data/
-[root@slurmctld data]# sbatch --wrap="hostname"
-Submitted batch job 2
-[root@slurmctld data]# cat slurm-2.out
-c1
-```
-
-### Running Example Jobs
-
-Use the included example scripts:
-
-```bash
+# Or run example jobs
 make run-examples
 ```
 
-This runs sample jobs including simple hostname tests, CPU-intensive workloads, multi-node jobs, and more.
+## 📈 Scaling
+
+Compute nodes use Slurm's dynamic registration (`slurmd -Z`) and self-register
+with sequential hostnames (c1, c2, c3... for CPU; g1, g2... for GPU). Scale up
+or down at any time without rebuilding.
+
+### Scale CPU Workers
+
+```bash
+# Scale to 5 CPU workers (default is 2)
+make scale-cpu-workers N=5
+
+# Or set the default count in .env
+CPU_WORKER_COUNT=4
+make up
+```
+
+### Scale GPU Workers
+
+```bash
+# Scale to 3 GPU workers (requires GPU_ENABLE=true)
+make scale-gpu-workers N=3
+```
+
+Verify with `make status`.
+
+## 📊 Monitoring
+
+### REST API
+
+Query cluster via REST API (version auto-detected: v0.0.44 for 25.11.x, v0.0.42 for 25.05.x):
+
+```bash
+# Get JWT Token
+JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+
+# Get nodes
+docker exec slurmrestd curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+  http://localhost:6820/slurm/v0.0.42/nodes | jq .nodes
+
+# Get partitions
+docker exec slurmrestd curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+  http://localhost:6820/slurm/v0.0.42/partitions | jq .partitions
+```
+
+### Elasticsearch and Kibana (Optional)
+
+Enable job completion monitoring and visualization:
+
+```bash
+# 1. Setting ELASTICSEARCH_HOST in .env enables the monitoring profile
+ELASTICSEARCH_HOST=http://elasticsearch:9200
+
+# 2. Start cluster (monitoring auto-enabled)
+make up
+
+# 3. Access Kibana at http://localhost:5601
+# After loading, click: Elasticsearch → Index Management → slurm → Discover index
+
+# 4. Query job completions directly
+docker exec elasticsearch curl -s "http://localhost:9200/slurm/_search?pretty"
+
+# Test monitoring
+make test-monitoring
+```
+
+**Indexed data:** Job ID, user, partition, state, times, nodes, exit code
+
+## 🎮 GPU Support (NVIDIA)
+
+Enable optional NVIDIA GPU support using [NVIDIA's official CUDA base images](https://hub.docker.com/r/nvidia/cuda/tags):
+
+```bash
+# 1. One-time host setup (add NVIDIA repo and install nvidia-container-toolkit)
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+sudo dnf install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# 2. Enable GPU in .env (uses NVIDIA's official CUDA base images)
+GPU_ENABLE=true
+BUILDER_BASE=nvidia/cuda:13.1.1-devel-rockylinux9
+RUNTIME_BASE=nvidia/cuda:13.1.1-base-rockylinux9
+
+# 3. Build with GPU support
+make rebuild
+
+# 4. Verify GPU detection
+docker exec g1 nvidia-smi
+
+# Test GPU functionality
+make test-gpu
+```
+
+> **Note:** GPU testing is not included in CI (GitHub-hosted runners have no GPUs). Run `make test-gpu` manually on a host with an NVIDIA GPU and `nvidia-container-toolkit` installed.
 
 ## 🔄 Cluster Management
 
-Stop the cluster (keeps data):
-
 ```bash
-make down
+make down     # Stop cluster (keeps data)
+make clean    # Remove all containers and volumes
+make rebuild  # Clean, rebuild, and restart
+make logs     # View container logs
 ```
 
-Restart the cluster:
+> **Note:** If `ELASTICSEARCH_HOST` is set in `.env`, monitoring containers are automatically managed.
+
+## 🐳 Docker Hub
+
+Pre-built multi-arch images (amd64 + arm64) are published on each [GitHub release](https://github.com/giovtorres/slurm-docker-cluster/releases):
 
 ```bash
-make up
+# CPU images
+docker pull giovtorres/slurm-docker-cluster:latest
+docker pull giovtorres/slurm-docker-cluster:25.11.2          # latest build for this Slurm version
+docker pull giovtorres/slurm-docker-cluster:25.11.2-2.1.0   # pinned to a specific release
+
+# GPU images (built on nvidia/cuda base)
+docker pull giovtorres/slurm-docker-cluster:latest-gpu
+docker pull giovtorres/slurm-docker-cluster:25.11.2-gpu
+docker pull giovtorres/slurm-docker-cluster:25.11.2-gpu-2.1.0
 ```
 
-Complete cleanup (removes all data and volumes):
+## ⚙️ Advanced
+
+### Version Management
 
 ```bash
-make clean
+make set-version VER=25.05.6   # Switch Slurm version
+make version                   # Show current version
+make build-all                 # Build all supported versions
+make test-all                  # Test all versions
 ```
 
-For more workflows including configuration updates, version switching, and testing, see the **Common Workflows** section below.
+### Configuration Updates
 
-## ⚙️ Advanced Configuration
+```bash
+# Live edit (persists across restarts)
+docker exec -it slurmctld vi /etc/slurm/slurm.conf
+make reload-slurm
+
+# Push local changes
+vi config/25.05/slurm.conf
+make update-slurm FILES="slurm.conf"
+
+# Permanent changes
+make rebuild
+```
 
 ### Multi-Architecture Builds
 
-For cross-platform builds or explicit architecture selection (`arm64` or
-`amd64`), use Docker Buildx:
-
 ```bash
-docker buildx build \
-  --platform linux/arm64 \
-  --build-arg SLURM_VERSION=25.05.3 \
-  --build-arg TARGETARCH=arm64 \
-  --load \
-  -t slurm-docker-cluster:25.05.3 \
-  .
+# Cross-platform build (uses QEMU emulation)
+docker buildx build --platform linux/arm64 \
+  --build-arg SLURM_VERSION=25.05.6 \
+  --load -t slurm-docker-cluster:25.05.6 .
 ```
 
-**Note**: Cross-platform builds use QEMU emulation and may be slower than native builds.
+## 📚 Documentation
 
-### Live Configuration Updates
-
-With the `etc_slurm` volume mounted, you can modify configurations without rebuilding:
-
-**Method 1 - Direct editing (persists across restarts):**
-```bash
-docker exec -it slurmctld vi /etc/slurm/slurm.conf
-make reload-slurm
-```
-
-**Method 2 - Push changes from config/ directory:**
-```bash
-# Edit config files locally in config/25.05/ or config/common/
-vi config/25.05/slurm.conf
-
-# Push to containers (automatically detects version from .env)
-make update-slurm FILES="slurm.conf"
-
-# Or update multiple files
-make update-slurm FILES="slurm.conf slurmdbd.conf"
-```
-
-**Method 3 - Rebuild image with new configs:**
-```bash
-# For permanent changes
-vi config/25.05/slurm.conf
-make rebuild
-```
-
-This makes it easy to add/remove nodes or test new configuration settings dynamically.
-
-## 📖 Common Workflows
-
-### Using Make (Recommended)
-
-#### First-time Setup:
-```bash
-# Build and start cluster
-make up
-
-# Verify everything is working
-make test
-
-# Check cluster status
-make status
-```
-
-#### Daily Development:
-```bash
-# View logs
-make logs
-
-# Open shell in controller
-make shell
-
-# Inside shell:
-cd /data
-sbatch --wrap="hostname"
-squeue
-```
-
-#### Testing Changes:
-```bash
-# After editing config files
-make down
-make start
-make test
-```
-
-#### Cleanup:
-```bash
-# Stop cluster (keeps data)
-make down
-
-# Complete cleanup (removes all data)
-make clean
-```
-
-### Example: Running Test Jobs
-
-```bash
-# Start cluster
-make start
-
-# Copy example jobs to cluster
-docker cp examples/jobs slurmctld:/data/
-
-# Submit a simple job
-docker exec slurmctld bash -c "cd /data/jobs && sbatch simple_hostname.sh"
-
-# Submit a multi-node job
-docker exec slurmctld bash -c "cd /data/jobs && sbatch multi_node.sh"
-
-# Watch job queue
-docker exec slurmctld squeue
-
-# View job outputs
-docker exec slurmctld bash -c "ls -lh /data/jobs/*.out"
-docker exec slurmctld bash -c "cat /data/jobs/hostname_test_*.out"
-```
-
-### Example: Testing Different Slurm Versions
-
-```bash
-# Check current version
-make version
-
-# Build all supported versions
-make build-all
-
-# Test a specific version
-make test-version VER=24.11.6
-
-# Test all versions (comprehensive)
-make test-all
-
-# Switch to a different version and use it
-make set-version VER=24.11.6
-make rebuild
-make test
-```
-
-### Example: Development Workflow
-
-```bash
-# Morning: Start cluster
-make start
-
-# Work on features, test locally
-make test
-
-# Check logs if issues arise
-make logs
-
-# Evening: Stop cluster
-make down
-
-# Next day: Quick restart
-make start
-```
-
-### Makefile Commands Reference
-
-| Command | Description |
-|---------|-------------|
-| `make help` | Show all available commands |
-| `make build` | Build Docker images |
-| `make up` | Start containers |
-| `make down` | Stop containers |
-| `make clean` | Remove containers and volumes |
-| `make logs` | Show container logs |
-| `make test` | Run test suite |
-| `make status` | Show cluster status |
-| `make shell` | Open shell in slurmctld |
-| `make update-slurm FILES="..."` | Update config files from config/ directory |
-| `make reload-slurm` | Reload Slurm config without restart |
-| **Multi-Version Commands** | |
-| `make version` | Show current Slurm version |
-| `make set-version VER=24.11.6` | Set Slurm version in .env |
-| `make build-all` | Build all supported versions |
-| `make test-version VER=24.11.6` | Test a specific version |
-| `make test-all` | Test all supported versions |
+- **Commands:** Run `make help` for all available commands
+- **Examples:** Job scripts in `examples/` directory
 
 ## 🤝 Contributing
 
-Contributions are welcomed from the community! If you want to add features, fix bugs, or improve documentation:
-
-1. Fork this repo.
-2. Create a new branch: `git checkout -b feature/your-feature`.
-3. Submit a pull request.
+Contributions are welcomed! Fork this repo, create a branch, and submit a pull request.
 
 ## 📄 License
 

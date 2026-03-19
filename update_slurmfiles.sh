@@ -13,7 +13,7 @@ if [ -z "$SLURM_VERSION" ]; then
     exit 1
 fi
 
-# Extract major.minor version (e.g., 25.05 from 25.05.3)
+# Extract major.minor version (e.g., 25.05 from 25.05.x)
 VERSION_DIR=$(echo "$SLURM_VERSION" | cut -d. -f1-2)
 
 restart=false

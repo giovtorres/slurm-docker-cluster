@@ -1,26 +1,52 @@
 # Multi-stage Dockerfile for Slurm runtime
-# Stage 1: Build RPMs using the builder image
-# Stage 2: Install RPMs in a clean runtime image
+# Stage 1: Build gosu from source with latest Go (avoids CVEs in pre-built binaries)
+# Stage 2: Build RPMs using the builder image
+# Stage 3: Install RPMs in a clean runtime image
 
 ARG SLURM_VERSION
+ARG GOSU_VERSION=1.19
+# BUILDER_BASE and RUNTIME_BASE overridden when GPU_ENABLE=true is set in .env
+ARG BUILDER_BASE=rockylinux/rockylinux:9
+ARG RUNTIME_BASE=rockylinux/rockylinux:9
 
 # ============================================================================
-# Stage 1: Build RPMs
+# Stage 1: Build gosu from source
+# (pre-built binaries use an old Go version that triggers CVEs)
+# https://github.com/tianon/gosu/issues/136
 # ============================================================================
-FROM rockylinux/rockylinux:9 AS builder
+FROM golang:1.26-bookworm AS gosu-builder
+
+ARG GOSU_VERSION
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN set -ex \
+    && git clone --branch ${GOSU_VERSION} --depth 1 \
+       https://github.com/tianon/gosu.git /go/src/github.com/tianon/gosu \
+    && cd /go/src/github.com/tianon/gosu \
+    && go mod download \
+    && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+       go build -v -trimpath -ldflags '-d -w' \
+       -o /go/bin/gosu . \
+    && chmod +x /go/bin/gosu
+
+# ============================================================================
+# Stage 2: Build RPMs
+# ============================================================================
+FROM ${BUILDER_BASE} AS builder
 
 ARG SLURM_VERSION
 ARG TARGETARCH
+ARG GPU_ENABLE
 
 # Enable CRB and EPEL repositories for development packages
 # Install RPM build tools and dependencies
 RUN set -ex \
     && dnf makecache \
-    && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
     && dnf makecache \
-    && dnf -y install \
+    && dnf -y install --nobest --exclude='*.i686' \
        autoconf \
        automake \
        bzip2 \
@@ -48,13 +74,15 @@ RUN set -ex \
        openssl-devel \
        pam-devel \
        perl \
-       python3 \
-       python3-devel \
+       python3.12 \
+       python3.12-devel \
        readline-devel \
        rpm-build \
        rpmdevtools \
        rrdtool-devel \
        wget \
+       libjwt \
+       libjwt-devel \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -63,6 +91,16 @@ RUN rpmdev-setuptree
 
 # Copy RPM macros
 COPY rpmbuild/slurm.rpmmacros /root/.rpmmacros
+
+# When GPU_ENABLE=true, the builder base image (nvidia/cuda:*-devel-*) provides
+# NVML headers. Symlink them to standard paths and enable --with-nvml for rpmbuild.
+RUN if [ "${GPU_ENABLE}" = "true" ]; then \
+        set -ex && \
+        CUDA_TARGET=$(case "${TARGETARCH}" in amd64) echo "x86_64-linux" ;; arm64) echo "sbsa-linux" ;; esac) && \
+        ln -sf /usr/local/cuda/include/nvml.h /usr/include/nvml.h && \
+        ln -sf /usr/local/cuda/targets/${CUDA_TARGET}/lib/stubs/libnvidia-ml.so /usr/lib64/libnvidia-ml.so && \
+        echo "%_with_nvml --with-nvml=/usr" >> /root/.rpmmacros; \
+    fi
 
 # Download official Slurm release tarball and build RPMs with slurmrestd enabled
 # Architecture mapping: Docker TARGETARCH (amd64, arm64) -> RPM arch (x86_64, aarch64)
@@ -80,9 +118,9 @@ RUN set -ex \
     && ls -lh /root/rpmbuild/RPMS/${RPM_ARCH}/
 
 # ============================================================================
-# Stage 2: Runtime image
+# Stage 3: Runtime image
 # ============================================================================
-FROM rockylinux/rockylinux:9
+FROM ${RUNTIME_BASE}
 
 LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docker-cluster" \
       org.opencontainers.image.title="slurm-docker-cluster" \
@@ -91,18 +129,16 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
 
 ARG SLURM_VERSION
 ARG TARGETARCH
+ARG GPU_ENABLE
 
-# Enable CRB and EPEL repositories for runtime dependencies
+# Enable CRB and EPEL repositories, then install runtime dependencies
 RUN set -ex \
-    && dnf makecache \
     && dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
     && dnf config-manager --set-enabled crb \
-    && dnf makecache
-
-# Install runtime dependencies only
-RUN set -ex \
+    && dnf makecache \
     && dnf -y install \
+       apptainer \
        bash-completion \
        bzip2 \
        gettext \
@@ -118,29 +154,26 @@ RUN set -ex \
        mariadb \
        munge \
        numactl \
+       openssh-server \
        perl \
        procps-ng \
        psmisc \
-       python3 \
+       python3.12 \
        readline \
        vim-enhanced \
        wget \
+       libjwt \
     && dnf clean all \
-    && rm -rf /var/cache/dnf
+    && rm -rf /var/cache/dnf \
+    && alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && alternatives --set python3 /usr/bin/python3.12 \
+    && ssh-keygen -A \
+    && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
-# Install gosu for privilege dropping
-ARG GOSU_VERSION=1.19
-
-RUN set -ex \
-    && echo "Installing gosu for architecture: ${TARGETARCH}" \
-    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-${TARGETARCH}" \
-    && wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-${TARGETARCH}.asc" \
-    && export GNUPGHOME="$(mktemp -d)" \
-    && gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
-    && gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
-    && rm -rf "${GNUPGHOME}" /usr/local/bin/gosu.asc \
-    && chmod +x /usr/local/bin/gosu \
-    && gosu nobody true
+# Install gosu (built from source in stage 1)
+COPY --from=gosu-builder /go/bin/gosu /usr/local/bin/gosu
+RUN gosu --version && gosu nobody true
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
@@ -156,27 +189,14 @@ RUN set -ex \
     && rm -rf /tmp/rpms \
     && dnf clean all
 
-# Install Singularity
-RUN set -ex \
-    && dnf -y install \
-       apptainer \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
-
-# Create slurm user and group
+# Create users, generate munge key, and set up directories
 RUN set -x \
     && groupadd -r --gid=990 slurm \
     && useradd -r -g slurm --uid=990 slurm \
     && groupadd -r --gid=991 slurmrest \
-    && useradd -r -g slurmrest --uid=991 slurmrest
-
-# Fix /etc permissions and create munge key
-RUN set -x \
+    && useradd -r -g slurmrest --uid=991 slurmrest \
     && chmod 0755 /etc \
-    && /sbin/create-munge-key
-
-# Create slurm dirs with correct ownership
-RUN set -x \
+    && /sbin/create-munge-key \
     && mkdir -m 0755 -p \
         /var/run/slurm \
         /var/spool/slurm \
@@ -200,10 +220,11 @@ RUN set -ex \
          echo "Using version-specific config for ${MAJOR_MINOR}"; \
          cp /tmp/slurm-config/${MAJOR_MINOR}/slurm.conf /etc/slurm/slurm.conf; \
        else \
-         echo "No version-specific config found for ${MAJOR_MINOR}, using latest (25.05)"; \
-         cp /tmp/slurm-config/25.05/slurm.conf /etc/slurm/slurm.conf; \
+         echo "No version-specific config found for ${MAJOR_MINOR}, using latest (25.11)"; \
+         cp /tmp/slurm-config/25.11/slurm.conf /etc/slurm/slurm.conf; \
        fi \
     && cp /tmp/slurm-config/common/slurmdbd.conf /etc/slurm/slurmdbd.conf \
+    && cp /tmp/slurm-config/common/job_submit.lua /etc/slurm/job_submit.lua \
     && if [ -f "/tmp/slurm-config/${MAJOR_MINOR}/cgroup.conf" ]; then \
          echo "Using version-specific cgroup.conf for ${MAJOR_MINOR}"; \
          cp /tmp/slurm-config/${MAJOR_MINOR}/cgroup.conf /etc/slurm/cgroup.conf; \
@@ -211,7 +232,15 @@ RUN set -ex \
          echo "Using common cgroup.conf"; \
          cp /tmp/slurm-config/common/cgroup.conf /etc/slurm/cgroup.conf; \
        fi \
-    && chown slurm:slurm /etc/slurm/slurm.conf /etc/slurm/cgroup.conf /etc/slurm/slurmdbd.conf \
+    && if [ "$GPU_ENABLE" = "true" ]; then \
+         echo "GPU support enabled, installing gres.conf"; \
+         cp /tmp/slurm-config/common/gres.conf /etc/slurm/gres.conf; \
+         chown slurm:slurm /etc/slurm/gres.conf; \
+         chmod 644 /etc/slurm/gres.conf; \
+       else \
+         echo "GPU support disabled, skipping gres.conf"; \
+       fi \
+    && chown slurm:slurm /etc/slurm/slurm.conf /etc/slurm/cgroup.conf /etc/slurm/slurmdbd.conf /etc/slurm/job_submit.lua \
     && chmod 644 /etc/slurm/slurm.conf /etc/slurm/cgroup.conf \
     && chmod 600 /etc/slurm/slurmdbd.conf \
     && rm -rf /tmp/slurm-config
