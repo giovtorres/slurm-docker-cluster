@@ -186,6 +186,7 @@ RUN set -ex \
        /tmp/rpms/slurm-slurmdbd-*.rpm \
        /tmp/rpms/slurm-slurmrestd-*.rpm \
        /tmp/rpms/slurm-contribs-*.rpm \
+       /tmp/rpms/slurm-devel-*.rpm \
     && rm -rf /tmp/rpms \
     && dnf clean all
 
