@@ -20,16 +20,16 @@ services:
       start_period: 30s
 
   slurmdbd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     build:
       context: .
       args:
-        SLURM_VERSION: ${SLURM_VERSION:-25.11.2}
+        SLURM_VERSION: ${SLURM_VERSION:-25.11.4}
         GPU_ENABLE: ${GPU_ENABLE:-false}
         BUILDER_BASE: ${BUILDER_BASE:-rockylinux/rockylinux:9}
         RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
       cache_from:
-        - slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+        - slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     command: ["slurmdbd"]
     container_name: slurmdbd
     hostname: slurmdbd
@@ -55,7 +55,7 @@ services:
       start_period: 20s
 
   slurmctld:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     command: ["slurmctld"]
     container_name: slurmctld
     hostname: slurmctld
@@ -87,7 +87,7 @@ services:
       start_period: 20s
 
   slurmrestd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     command: ["slurmrestd"]
     container_name: slurmrestd
     hostname: slurmrestd
@@ -113,7 +113,7 @@ services:
       start_period: 20s
 
   cpu-worker:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     command: ["slurmd-cpu"]
     working_dir: /data
     privileged: true
@@ -143,7 +143,7 @@ services:
   # GPU compute node (NVIDIA)
   # Requires: GPU_ENABLE=true in .env and nvidia-container-toolkit installed on host
   gpu-worker:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.2}
+    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     command: ["slurmd-gpu"]
     working_dir: /data
     privileged: true
