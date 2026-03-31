@@ -42,6 +42,7 @@ make help               # see all available commands
 - **slurmrestd** - REST API daemon (HTTP/JSON access)
 - **c1, c2** - CPU compute nodes (dynamically scalable)
 - **g1** - (optional) GPU compute node with NVIDIA support (dynamically scalable)
+- **ondemand** - (optional) Open OnDemand web portal
 - **elasticsearch** - (optional) indexing jobs
 - **kibana** - (optional) visualization for elasticsearch
 
@@ -52,6 +53,7 @@ make help               # see all available commands
 - Job files (`slurm_jobdir`)
 - Database (`var_lib_mysql`)
 - Authentication (`etc_munge`)
+- OOD user home (`home_ood`)
 
 ## 🖥️ Using the Cluster
 
@@ -136,6 +138,32 @@ make test-monitoring
 ```
 
 **Indexed data:** Job ID, user, partition, state, times, nodes, exit code
+
+## 🌐 Open OnDemand (Optional)
+
+Enable the [Open OnDemand](https://openondemand.org/) web portal for browser-based cluster access — submit jobs, manage files, and monitor the queue without the command line:
+
+```bash
+# Enable in .env
+OOD_ENABLE=true
+
+# Build and start (OOD profile auto-enabled)
+make build
+make up
+
+# Access at http://localhost:8080
+# Login: ood@localhost / password
+
+# Test OOD integration
+make test-ondemand
+```
+
+OOD connects to the Slurm cluster as the `ood` user and shares a home directory
+across compute nodes for job I/O. OOD config files live in `ood/`.Changes
+require `make rebuild`.
+
+> **Note:** This setup uses Dex with a static password for development
+> purposes. See the [OOD authentication docs](https://osc.github.io/ood-documentation/latest/authentication/dex.html).
 
 ## 🎮 GPU Support (NVIDIA)
 

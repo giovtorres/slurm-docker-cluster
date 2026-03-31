@@ -39,27 +39,27 @@ jobs:
         # All versions on amd64, latest only on arm64
         slurm_version: ['25.11.4', '25.05.7']
         runner: ['ubuntu-latest']
-        monitoring: ['disabled', 'enabled']
+        monitoring: ['monitoring-disabled', 'monitoring-enabled']
         include:
           - runner: ubuntu-latest
             arch: amd64
           - slurm_version: '25.11.4'
             runner: ubuntu-24.04-arm
             arch: arm64
-            monitoring: disabled
+            monitoring: monitoring-disabled
           - slurm_version: '25.11.4'
             runner: ubuntu-24.04-arm
             arch: arm64
-            monitoring: enabled
+            monitoring: monitoring-enabled
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure cluster - Slurm ${{ matrix.slurm_version }} (${{ matrix.arch }}) - Monitoring ${{ matrix.monitoring }}
+      - name: Configure cluster - Slurm ${{ matrix.slurm_version }} (${{ matrix.arch }}) - ${{ matrix.monitoring }}
         run: |
           echo "SLURM_VERSION=${{ matrix.slurm_version }}" > .env
-          if [ "${{ matrix.monitoring }}" == "enabled" ]; then
+          if [ "${{ matrix.monitoring }}" == "monitoring-enabled" ]; then
             echo "ELASTICSEARCH_HOST=http://elasticsearch:9200" >> .env
             echo "✓ Monitoring ENABLED"
           else
@@ -119,7 +119,7 @@ jobs:
           sleep 10
 
       - name: Wait for Elasticsearch to be healthy
-        if: matrix.monitoring == 'enabled'
+        if: matrix.monitoring == 'monitoring-enabled'
         run: |
           timeout 90 bash -c 'until docker compose ps elasticsearch | grep -q "healthy"; do
             echo "Waiting for Elasticsearch..."
@@ -128,7 +128,7 @@ jobs:
           echo "Elasticsearch is healthy"
 
       - name: Wait for Kibana to be healthy
-        if: matrix.monitoring == 'enabled'
+        if: matrix.monitoring == 'monitoring-enabled'
         run: |
           timeout 120 bash -c 'until docker compose ps kibana | grep -q "healthy"; do
             echo "Waiting for Kibana..."
@@ -140,7 +140,7 @@ jobs:
         run: make status
 
       - name: Show monitoring status
-        if: matrix.monitoring == 'enabled'
+        if: matrix.monitoring == 'monitoring-enabled'
         run: |
           echo "=== Elasticsearch Health ==="
           docker exec elasticsearch curl -s "http://localhost:9200/_cluster/health?pretty"
@@ -152,12 +152,92 @@ jobs:
         run: make test
 
       - name: Run monitoring test suite
-        if: matrix.monitoring == 'enabled'
+        if: matrix.monitoring == 'monitoring-enabled'
         run: make test-monitoring
 
       - name: Show logs on failure
         if: failure()
         run: make logs
+
+      - name: Cleanup
+        if: always()
+        run: make clean
+
+  test-ondemand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure cluster with OOD
+        run: |
+          echo "SLURM_VERSION=$(grep '^SLURM_VERSION=' .env.example | cut -d= -f2)" > .env
+          echo "OOD_ENABLE=true" >> .env
+          cat .env
+
+      - name: Build cluster and OOD image
+        run: make build
+
+      - name: Start cluster with OOD
+        run: |
+          make up
+          echo "Waiting for services to start..."
+          sleep 15
+
+      - name: Wait for MySQL to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps mysql | grep -q "healthy"; do
+            echo "Waiting for MySQL..."
+            sleep 2
+          done'
+          echo "MySQL is healthy"
+
+      - name: Wait for slurmdbd to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps slurmdbd | grep -q "healthy"; do
+            echo "Waiting for slurmdbd..."
+            sleep 2
+          done'
+          echo "slurmdbd is healthy"
+
+      - name: Wait for slurmctld to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose ps slurmctld | grep -q "healthy"; do
+            echo "Waiting for slurmctld..."
+            sleep 2
+          done'
+          echo "slurmctld is healthy"
+
+      - name: Wait for compute nodes to be healthy
+        run: |
+          timeout 90 bash -c 'until docker compose ps cpu-worker 2>/dev/null | grep -q "healthy"; do
+            echo "Waiting for cpu-workers..."
+            sleep 2
+          done'
+          echo "CPU workers are healthy"
+          sleep 10
+
+      - name: Wait for OOD to be healthy
+        run: |
+          timeout 120 bash -c 'until docker compose --profile ondemand ps ondemand | grep -q "healthy"; do
+            echo "Waiting for Open OnDemand..."
+            sleep 2
+          done'
+          echo "Open OnDemand is healthy"
+
+      - name: Show cluster status
+        run: make status
+
+      - name: Run core test suite
+        run: make test
+
+      - name: Run OOD test suite
+        run: make test-ondemand
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose --profile ondemand logs
 
       - name: Cleanup
         if: always()

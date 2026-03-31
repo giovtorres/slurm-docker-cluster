@@ -187,6 +187,8 @@ RUN set -ex \
        /tmp/rpms/slurm-slurmrestd-*.rpm \
        /tmp/rpms/slurm-contribs-*.rpm \
        /tmp/rpms/slurm-devel-*.rpm \
+    && mkdir -p /var/cache/slurm-rpms \
+    && cp /tmp/rpms/slurm-[0-9]*.rpm /tmp/rpms/slurm-contribs-*.rpm /tmp/rpms/slurm-devel-*.rpm /var/cache/slurm-rpms/ \
     && rm -rf /tmp/rpms \
     && dnf clean all
 
@@ -209,7 +211,8 @@ RUN set -x \
         /var/spool/slurm \
         /var/lib/slurm \
         /var/log/slurm \
-        /etc/slurm
+        /etc/slurm \
+    && useradd -m -u 1001 ood
 
 # Copy Slurm configuration files
 # Version-specific configs: Extract major.minor from SLURM_VERSION (e.g., "24.11" from "24.11.6")

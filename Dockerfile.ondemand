@@ -1,0 +1,105 @@
+# Open OnDemand web portal for Slurm Docker Cluster
+# Reuses the Slurm RPMs from the main Dockerfile's builder stage
+#
+# Usage: docker compose --profile ondemand up -d
+# Access: http://localhost:8080 (login: ood@localhost / password)
+
+# Default must match SLURM_VERSION in .env.example / docker-compose.yml
+ARG SLURM_VERSION
+ARG RUNTIME_BASE=rockylinux/rockylinux:9
+
+# Reference the main Slurm image to extract built RPMs and gosu
+FROM slurm-docker-cluster:${SLURM_VERSION} AS slurm-base
+
+# ============================================================================
+# Open OnDemand runtime
+# ============================================================================
+FROM ${RUNTIME_BASE}
+
+LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docker-cluster" \
+      org.opencontainers.image.title="slurm-docker-cluster-ondemand" \
+      org.opencontainers.image.description="Open OnDemand web portal for Slurm Docker cluster"
+
+ARG SLURM_VERSION
+
+# Install base dependencies and enable module streams needed by OOD
+RUN set -ex \
+    && dnf -y update \
+    && dnf -y install dnf-plugins-core epel-release \
+    && dnf config-manager --set-enabled crb \
+    && dnf module -y enable ruby:3.3 nodejs:22 \
+    && dnf makecache \
+    && dnf -y install --allowerasing \
+       curl \
+       munge \
+       openssh-server \
+       openssh-clients \
+       procps-ng \
+       libyaml \
+       libjwt \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# Copy Slurm RPMs from the main image and install via dnf
+COPY --from=slurm-base /usr/local/bin/gosu /usr/local/bin/gosu
+RUN --mount=from=slurm-base,source=/var/cache/slurm-rpms,target=/tmp/rpms \
+    dnf -y install /tmp/rpms/slurm-[0-9]*.rpm /tmp/rpms/slurm-contribs-*.rpm /tmp/rpms/slurm-devel-*.rpm \
+    && dnf clean all
+
+# Install Open OnDemand
+RUN set -ex \
+    && rpm --import https://yum.osc.edu/ondemand/RPM-GPG-KEY-ondemand-SHA512 \
+    && dnf -y install https://yum.osc.edu/ondemand/latest/ondemand-release-web-latest-1-8.el9.noarch.rpm \
+    && dnf -y install --allowerasing \
+       ondemand \
+       ondemand-dex \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# Create Slurm user/group (must match main cluster)
+RUN set -x \
+    && groupadd -r --gid=990 slurm \
+    && useradd -r -g slurm --uid=990 slurm \
+    && chmod 0755 /etc \
+    && mkdir -m 0755 -p \
+        /var/run/slurm \
+        /var/spool/slurm \
+        /var/lib/slurm \
+        /var/log/slurm \
+        /etc/slurm \
+    && chown slurm:slurm \
+        /var/run/slurm \
+        /var/spool/slurm \
+        /var/lib/slurm \
+        /var/log/slurm \
+        /etc/slurm
+
+# Generate SSH host keys and configure sshd
+RUN ssh-keygen -A \
+    && sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+
+# Create OOD demo user with SSH key for PUN access
+RUN useradd -m -u 1001 ood \
+    && mkdir -p /home/ood/.ssh \
+    && ssh-keygen -t ecdsa -f /home/ood/.ssh/id_ecdsa -N "" -q \
+    && cp /home/ood/.ssh/id_ecdsa.pub /home/ood/.ssh/authorized_keys \
+    && chmod 700 /home/ood/.ssh \
+    && chmod 600 /home/ood/.ssh/authorized_keys \
+    && chown -R ood:ood /home/ood/.ssh \
+    && mkdir -p /etc/skel/.ssh \
+    && cp /home/ood/.ssh/* /etc/skel/.ssh/
+
+# Copy OOD configuration
+COPY ood/ood_portal.yml /etc/ood/config/ood_portal.yml
+COPY ood/clusters.d/slurm.yml /etc/ood/config/clusters.d/slurm.yml
+COPY ood/nginx_stage.yml /etc/ood/config/nginx_stage.yml
+
+# Create required directories
+RUN mkdir -p /etc/ood/dex \
+    && chown ondemand:ondemand /etc/ood/dex 2>/dev/null || true
+
+COPY ood/ondemand-entrypoint.sh /usr/local/bin/ondemand-entrypoint.sh
+
+EXPOSE 8080 5556
+
+ENTRYPOINT ["/usr/local/bin/ondemand-entrypoint.sh"]

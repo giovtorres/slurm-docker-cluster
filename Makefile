@@ -1,4 +1,4 @@
-.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples scale-cpu-workers scale-gpu-workers
+.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu test-ondemand status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples scale-cpu-workers scale-gpu-workers
 
 # Default target
 .DEFAULT_GOAL := help
@@ -11,6 +11,7 @@ DEFAULT_VERSION := $(shell grep '^SLURM_VERSION=' .env.example | cut -d= -f2)
 # Auto-detect profiles based on .env configuration
 ELASTICSEARCH_HOST := $(shell grep -E '^ELASTICSEARCH_HOST=' .env 2>/dev/null | cut -d= -f2)
 GPU_ENABLE := $(shell grep -E '^GPU_ENABLE=' .env 2>/dev/null | cut -d= -f2)
+OOD_ENABLE := $(shell grep -E '^OOD_ENABLE=' .env 2>/dev/null | cut -d= -f2)
 
 # Build profile flags
 PROFILES :=
@@ -19,6 +20,9 @@ ifdef ELASTICSEARCH_HOST
 endif
 ifeq ($(GPU_ENABLE),true)
     PROFILES += --profile gpu
+endif
+ifeq ($(OOD_ENABLE),true)
+    PROFILES += --profile ondemand
 endif
 PROFILE_FLAG := $(PROFILES)
 
@@ -56,6 +60,7 @@ help:  ## Show this help message
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test" "Run test suite"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-monitoring" "Run monitoring profile tests"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-gpu" "Run GPU profile tests"
+	@printf "  ${CYAN}%-15s${RESET} %s\n" "test-ondemand" "Run Open OnDemand profile tests"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "quick-test" "Submit a quick test job"
 	@printf "  ${CYAN}%-15s${RESET} %s\n" "run-examples" "Run example jobs"
 	@echo ""
@@ -80,6 +85,11 @@ help:  ## Show this help message
 	@echo "GPU Support (NVIDIA):"
 	@echo "  Enable:  Set GPU_ENABLE=true in .env (requires nvidia-container-toolkit on host)"
 	@echo "  Disable: Set GPU_ENABLE=false or remove GPU_ENABLE from .env"
+	@echo ""
+	@echo "Open OnDemand:"
+	@echo "  Enable:  Set OOD_ENABLE=true in .env"
+	@echo "  Disable: Comment out or remove OOD_ENABLE from .env"
+	@echo "  Access:  http://localhost:8080 (login: ood@localhost / password)"
 
 build:  ## Build Docker images
 	docker compose --progress plain build
@@ -107,6 +117,9 @@ test-monitoring:  ## Run monitoring profile test suite
 
 test-gpu:  ## Run GPU profile test suite
 	./test_gpu.sh
+
+test-ondemand:  ## Run Open OnDemand profile test suite
+	./test_ondemand.sh
 
 status:  ## Show cluster status
 	@echo "=== Containers ==="
@@ -160,7 +173,7 @@ scale-cpu-workers:  ## Scale CPU workers (usage: make scale-cpu-workers N=3)
 			docker exec "$$cid" hostname 2>/dev/null; \
 		done | sort); \
 	SLURM_NODES=$$(docker exec slurmctld scontrol show nodes 2>/dev/null \
-		| grep -oP 'NodeName=c\d+' | cut -d= -f2 | sort); \
+		| grep -o 'NodeName=c[0-9]*' | cut -d= -f2 | sort); \
 	STALE_NODES=$$(comm -23 <(echo "$$SLURM_NODES") <(echo "$$LIVE_NODES") | paste -sd, -); \
 	if [ -n "$$STALE_NODES" ]; then \
 		echo "Removing stale dynamic nodes: $$STALE_NODES"; \
@@ -181,7 +194,7 @@ scale-gpu-workers:  ## Scale GPU workers (usage: make scale-gpu-workers N=2)
 			docker exec "$$cid" hostname 2>/dev/null; \
 		done | sort); \
 	SLURM_NODES=$$(docker exec slurmctld scontrol show nodes 2>/dev/null \
-		| grep -oP 'NodeName=g\d+' | cut -d= -f2 | sort); \
+		| grep -o 'NodeName=g[0-9]*' | cut -d= -f2 | sort); \
 	STALE_NODES=$$(comm -23 <(echo "$$SLURM_NODES") <(echo "$$LIVE_NODES") | paste -sd, -); \
 	if [ -n "$$STALE_NODES" ]; then \
 		echo "Removing stale GPU nodes: $$STALE_NODES"; \

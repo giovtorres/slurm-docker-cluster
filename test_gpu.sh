@@ -62,7 +62,7 @@ get_first_gpu_worker() {
 
 # Get the first gpu-worker node name from Slurm
 get_first_gpu_node() {
-    docker exec slurmctld scontrol show nodes 2>/dev/null | grep -oP 'NodeName=g\d+' | head -1 | cut -d= -f2
+    docker exec slurmctld scontrol show nodes 2>/dev/null | grep -o 'NodeName=g[0-9]*' | head -1 | cut -d= -f2
 }
 
 # Check gpu-worker container is running
@@ -220,7 +220,7 @@ chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oP '\\d+'")
     local elapsed=0
     while [[ $elapsed -lt 60 ]]; do
         local state
-        state=$(docker exec slurmctld scontrol show job "$jobid" | grep "JobState=" | grep -oP 'JobState=\K\w+' || echo "UNKNOWN")
+        state=$(docker exec slurmctld scontrol show job "$jobid" | grep "JobState=" | sed -n 's/.*JobState=\([A-Z]*\).*/\1/p' || echo "UNKNOWN")
 
         if [[ "$state" == "COMPLETED" ]]; then
             log_success "GPU job $jobid completed successfully"
