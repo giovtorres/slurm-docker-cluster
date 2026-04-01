@@ -1,0 +1,6 @@
+# Nginx Stage configuration for Per-User Nginx (PUN)
+# See: https://osc.github.io/ood-documentation/latest/reference/files/nginx-stage-yml.html
+
+---
+pun_custom_env:
+  OOD_FILE_EDITOR: "vim"

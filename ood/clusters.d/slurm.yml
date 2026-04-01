@@ -1,0 +1,14 @@
+---
+v2:
+  metadata:
+    title: "Slurm Docker Cluster"
+  login:
+    host: "ondemand"
+  job:
+    adapter: "slurm"
+    cluster: "linux"
+    bin: "/usr/bin"
+  batch_connect:
+    basic:
+      script_wrapper: |
+        %s

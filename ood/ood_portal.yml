@@ -1,0 +1,29 @@
+# Open OnDemand portal configuration
+# See: https://osc.github.io/ood-documentation/latest/reference/files/ood-portal-yml.html
+#
+# Default login credentials (no connectors = static password):
+#   Username: ood@localhost
+#   Password: password
+
+---
+servername: localhost
+port: 8080
+listen_addr_port:
+  - "8080"
+
+auth:
+  - "AuthType openid-connect"
+  - "Require valid-user"
+
+dex:
+  ssl: false
+  http_port: "5556"
+  tls_cert: null
+  tls_key: null
+  storage_file: "/etc/ood/dex/dex.db"
+  grpc: null
+
+logout_redirect: "/ood/auth/discovery"
+host_regex: "[^/]+"
+node_uri: "/node"
+rnode_uri: "/rnode"

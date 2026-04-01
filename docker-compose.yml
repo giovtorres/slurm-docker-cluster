@@ -124,6 +124,7 @@ services:
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
+      - home_ood:/home/ood  # shared with OOD for job I/O
     expose:
       - "6818"
     depends_on:
@@ -155,6 +156,7 @@ services:
       - etc_slurm:/etc/slurm
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
+      - home_ood:/home/ood  # shared with OOD for job I/O
     expose:
       - "6818"
     depends_on:
@@ -176,6 +178,38 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu, compute, utility]
+
+  # Open OnDemand web portal (OPTIONAL)
+  # Start with: docker compose --profile ondemand up -d
+  #   or set OOD_ENABLE=true in .env
+  ondemand:
+    build:
+      context: .
+      dockerfile: Dockerfile.ondemand
+      args:
+        SLURM_VERSION: ${SLURM_VERSION:-25.11.4}
+        RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
+    profiles: ["ondemand"]
+    container_name: ondemand
+    hostname: ondemand
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - home_ood:/home/ood
+    ports:
+      - "${OOD_PORT:-8080}:8080"
+    depends_on:
+      slurmctld:
+        condition: service_healthy
+    networks:
+      - slurm-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Optional Elasticsearch for job completion logging
   # Start with: docker compose --profile monitoring up -d
@@ -230,6 +264,7 @@ volumes:
   slurm_jobdir:
   var_lib_mysql:
   var_log_slurm:
+  home_ood:
   elasticsearch_data:
 
 networks:

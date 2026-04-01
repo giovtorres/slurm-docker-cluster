@@ -184,8 +184,8 @@ test_config_consistency() {
     fi
 
     # Check CPU: slurm.conf NodeSet feature must match entrypoint's slurmd-cpu Feature
-    CPU_CONF_FEATURE=$(echo "$SLURM_CONF" | grep -oP 'NodeSet=cpu_nodes\s+Feature=\K\S+' || true)
-    CPU_ENTRY_FEATURE=$(echo "$ENTRYPOINT" | sed -n '/slurmd-cpu/,/^fi$/p' | grep -oP 'Feature=\K[a-zA-Z0-9_]+' | head -1 || true)
+    CPU_CONF_FEATURE=$(echo "$SLURM_CONF" | grep 'NodeSet=cpu_nodes' | sed -n 's/.*Feature=\([^ ]*\).*/\1/p' || true)
+    CPU_ENTRY_FEATURE=$(echo "$ENTRYPOINT" | sed -n '/slurmd-cpu/,/^fi$/p' | sed -n 's/.*Feature=\([a-zA-Z0-9_]*\).*/\1/p' | head -1 || true)
 
     if [ -z "$CPU_CONF_FEATURE" ]; then
         print_fail "  No cpu_nodes NodeSet Feature found in slurm.conf"
@@ -201,8 +201,8 @@ test_config_consistency() {
     fi
 
     # Check GPU: slurm.conf NodeSet feature must match entrypoint's slurmd-gpu Feature
-    GPU_CONF_FEATURE=$(echo "$SLURM_CONF" | grep -oP 'NodeSet=gpu_nodes\s+Feature=\K\S+' || true)
-    GPU_ENTRY_FEATURE=$(echo "$ENTRYPOINT" | sed -n '/slurmd-gpu/,/^fi$/p' | grep -oP 'Feature=\K[a-zA-Z0-9_]+' | head -1 || true)
+    GPU_CONF_FEATURE=$(echo "$SLURM_CONF" | grep 'NodeSet=gpu_nodes' | sed -n 's/.*Feature=\([^ ]*\).*/\1/p' || true)
+    GPU_ENTRY_FEATURE=$(echo "$ENTRYPOINT" | sed -n '/slurmd-gpu/,/^fi$/p' | sed -n 's/.*Feature=\([a-zA-Z0-9_]*\).*/\1/p' | head -1 || true)
 
     if [ -z "$GPU_CONF_FEATURE" ]; then
         print_fail "  No gpu_nodes NodeSet Feature found in slurm.conf"
@@ -218,8 +218,8 @@ test_config_consistency() {
     fi
 
     # Verify CPU and GPU partitions reference their respective NodeSets
-    CPU_PARTITION_NODES=$(echo "$SLURM_CONF" | grep -oP 'PartitionName=cpu\s+Nodes=\K\S+' || true)
-    GPU_PARTITION_NODES=$(echo "$SLURM_CONF" | grep -oP 'PartitionName=gpu\s+Nodes=\K\S+' || true)
+    CPU_PARTITION_NODES=$(echo "$SLURM_CONF" | grep 'PartitionName=cpu ' | sed -n 's/.*Nodes=\([^ ]*\).*/\1/p' || true)
+    GPU_PARTITION_NODES=$(echo "$SLURM_CONF" | grep 'PartitionName=gpu ' | sed -n 's/.*Nodes=\([^ ]*\).*/\1/p' || true)
 
     if [ "$CPU_PARTITION_NODES" = "cpu_nodes" ]; then
         print_info "  ✓ cpu partition references cpu_nodes NodeSet"
@@ -325,7 +325,7 @@ test_resource_limits() {
     print_test "Testing resource limit configuration..."
 
     # Check if dynamic nodes have CPU and memory configured
-    FIRST_NODE=$(docker exec slurmctld scontrol show nodes 2>/dev/null | grep -oP 'NodeName=c\d+' | head -1 | cut -d= -f2)
+    FIRST_NODE=$(docker exec slurmctld scontrol show nodes 2>/dev/null | grep -o 'NodeName=c[0-9]*' | head -1 | cut -d= -f2)
 
     if [ -z "$FIRST_NODE" ]; then
         print_fail "No dynamic CPU worker nodes found"
@@ -334,7 +334,7 @@ test_resource_limits() {
 
     NODE_INFO=$(docker exec slurmctld scontrol show node "$FIRST_NODE" | grep -E "CPUTot|RealMemory")
 
-    if echo "$NODE_INFO" | grep -qP "CPUTot=[0-9]+" && echo "$NODE_INFO" | grep -qP "RealMemory=[0-9]+"; then
+    if echo "$NODE_INFO" | grep -q "CPUTot=[0-9]" && echo "$NODE_INFO" | grep -q "RealMemory=[0-9]"; then
         print_pass "Resource limits configured correctly on $FIRST_NODE"
     else
         print_fail "Resource limits not configured as expected on $FIRST_NODE"
@@ -378,7 +378,7 @@ test_scale_up() {
 
     # Verify all node names match c<N> pattern (no container ID fallbacks)
     BAD_NAMES=$(docker exec slurmctld scontrol show nodes 2>/dev/null \
-        | grep -oP 'NodeName=\S+' | cut -d= -f2 | grep -vP '^c\d+$' || true)
+        | grep -o 'NodeName=[^ ]*' | cut -d= -f2 | grep -v '^c[0-9]*$' || true)
 
     if [ -n "$BAD_NAMES" ]; then
         print_fail "Found node names not matching c<N> pattern: $BAD_NAMES"
@@ -429,7 +429,7 @@ test_scale_down() {
             docker exec "$cid" hostname 2>/dev/null
         done | sort)
     SLURM_NODES=$(docker exec slurmctld scontrol show nodes 2>/dev/null \
-        | grep -oP 'NodeName=c\d+' | cut -d= -f2 | sort)
+        | grep -o 'NodeName=c[0-9]*' | cut -d= -f2 | sort)
     STALE_NODES=$(comm -23 <(echo "$SLURM_NODES") <(echo "$LIVE_NODES") | paste -sd, -)
 
     if [ -n "$STALE_NODES" ]; then
