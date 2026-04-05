@@ -25,6 +25,8 @@ services:
       context: .
       args:
         SLURM_VERSION: ${SLURM_VERSION:-25.11.4}
+        LMOD_VERSION: ${LMOD_VERSION:-9.1.2}
+        SPACK_VERSION: ${SPACK_VERSION:-v1.1.1}
         GPU_ENABLE: ${GPU_ENABLE:-false}
         BUILDER_BASE: ${BUILDER_BASE:-rockylinux/rockylinux:9}
         RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
@@ -69,6 +71,8 @@ services:
       - etc_slurm:/etc/slurm:z
       - slurm_jobdir:/data:z
       - var_log_slurm:/var/log/slurm:z
+      - opt_modulefiles:/opt/modulefiles
+      - spack_root:/opt/spack
       - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/tmp/authorized_keys_host:ro,z
     ports:
       - "${SSH_PORT:-3022}:22"
@@ -125,6 +129,8 @@ services:
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
       - home_ood:/home/ood  # shared with OOD for job I/O
+      - opt_modulefiles:/opt/modulefiles
+      - spack_root:/opt/spack
     expose:
       - "6818"
     depends_on:
@@ -157,6 +163,8 @@ services:
       - slurm_jobdir:/data
       - var_log_slurm:/var/log/slurm
       - home_ood:/home/ood  # shared with OOD for job I/O
+      - opt_modulefiles:/opt/modulefiles
+      - spack_root:/opt/spack
     expose:
       - "6818"
     depends_on:
@@ -265,6 +273,8 @@ volumes:
   var_lib_mysql:
   var_log_slurm:
   home_ood:
+  opt_modulefiles:
+  spack_root:
   elasticsearch_data:
 
 networks:
