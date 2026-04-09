@@ -67,7 +67,7 @@ test_containers_running() {
     done
 
     # Check cpu-worker nodes dynamically
-    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$WORKER_COUNT" -gt 0 ]; then
         print_info "  ✓ $WORKER_COUNT worker node(s) running"
@@ -131,10 +131,10 @@ test_slurmctld_status() {
 test_compute_nodes() {
     print_test "Testing compute nodes availability..."
 
-    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
 
     # Count running cpu-worker nodes
-    EXPECTED_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+    EXPECTED_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$NODE_COUNT" -eq "$EXPECTED_COUNT" ]; then
         print_pass "$NODE_COUNT compute node(s) are available (matches expected $EXPECTED_COUNT)"
@@ -297,20 +297,11 @@ test_job_accounting() {
 test_multi_node_job() {
     print_test "Testing multi-node job allocation..."
 
-    # Get current node count
-    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
-
-    # Only run multi-node test if we have 2+ nodes
-    if [ "$NODE_COUNT" -lt 2 ]; then
-        print_info "  Skipping (only $NODE_COUNT node available)"
-        return 0
-    fi
-
     # Try to allocate 2 nodes
     JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 hostname" 2>&1 || echo "FAILED")
 
     # Count non-empty lines in output (should be 2 hostnames)
-    OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l)
+    OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l | tr -d ' ')
 
     if [ "$OUTPUT_LINES" -eq 2 ]; then
         print_pass "Multi-node job executed on 2 nodes"
@@ -347,11 +338,11 @@ test_scale_up() {
     print_test "Testing dynamic scale-up..."
 
     # Get initial node count
-    INITIAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+    INITIAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
     print_info "  Initial node count: $INITIAL_COUNT"
 
     # Get current worker count and scale up by 1
-    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
     TARGET=$((WORKER_COUNT + 1))
     print_info "  Scaling cpu-worker from $WORKER_COUNT to $TARGET"
 
@@ -360,14 +351,14 @@ test_scale_up() {
     # Poll until the new node appears in Slurm and is ready (max 60s)
     EXPECTED_COUNT=$((INITIAL_COUNT + 1))
     for i in $(seq 1 60); do
-        CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h 2>/dev/null | wc -l)
+        CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h 2>/dev/null | wc -l | tr -d ' ')
         if [ "$CURRENT_COUNT" -ge "$EXPECTED_COUNT" ]; then
             break
         fi
         sleep 1
     done
 
-    CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+    CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
 
     if [ "$CURRENT_COUNT" -ne "$EXPECTED_COUNT" ]; then
         print_fail "Expected $EXPECTED_COUNT nodes after scale-up, found $CURRENT_COUNT"
@@ -400,13 +391,8 @@ test_scale_down() {
     print_test "Testing dynamic scale-down with stale node cleanup..."
 
     # Get current counts
-    CURRENT_NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
-    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
-
-    if [ "$WORKER_COUNT" -lt 2 ]; then
-        print_info "  Skipping (only $WORKER_COUNT worker, need at least 2 to scale down)"
-        return 0
-    fi
+    CURRENT_NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
+    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
 
     TARGET=$((WORKER_COUNT - 1))
     EXPECTED_COUNT=$((CURRENT_NODE_COUNT - 1))
@@ -416,7 +402,7 @@ test_scale_down() {
 
     # Wait for the extra container to stop
     for i in $(seq 1 15); do
-        LIVE=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+        LIVE=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
         if [ "$LIVE" -le "$TARGET" ]; then
             break
         fi
@@ -438,7 +424,7 @@ test_scale_down() {
     fi
 
     # Verify node count decreased
-    FINAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
+    FINAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
 
     if [ "$FINAL_COUNT" -ne "$EXPECTED_COUNT" ]; then
         print_fail "Expected $EXPECTED_COUNT nodes after scale-down, found $FINAL_COUNT"
@@ -476,15 +462,6 @@ test_singularity_pull_image() {
 test_singularity_multi_node_job() {
     print_test "Testing Singularity multi-node job..."
 
-    # Get current node count
-    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l)
-
-    # Only run multi-node test if we have 2+ nodes
-    if [ "$NODE_COUNT" -lt 2 ]; then
-        print_info "  Skipping (only $NODE_COUNT node available)"
-        return 0
-    fi
-
     # Check if alpine_3.22.2.sif exists, if not, pull it
     if ! docker exec slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
         if ! docker exec slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
@@ -497,7 +474,7 @@ test_singularity_multi_node_job() {
     JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 singularity exec alpine_3.22.2.sif /bin/sh -c 'cat /etc/alpine-release'" 2>&1 || echo "FAILED")
 
     # Count non-empty lines in output (should be 2 Alpine release lines)
-    OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l)
+    OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l | tr -d ' ')
 
     # Clean up the image
     docker exec slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
@@ -529,7 +506,7 @@ test_get_jwt_token() {
         print_info "  JWT Token: ${JWT_TOKEN:0:50}..."
 
         # Validate JWT token format (should have 3 parts separated by dots)
-        DOT_COUNT=$(echo "$JWT_TOKEN" | grep -o '\.' | wc -l)
+        DOT_COUNT=$(echo "$JWT_TOKEN" | grep -o '\.' | wc -l | tr -d ' ')
 
         if [ "$DOT_COUNT" -eq 2 ]; then
             # Verify each part contains valid base64-like characters
@@ -700,6 +677,80 @@ test_rest_api_partitions() {
     fi
 }
 
+test_lmod() {
+    print_test "Testing Lmod module system..."
+
+    # Check version string appears in output (guards against silent eval-of-empty-string failures)
+    if ! docker exec slurmctld bash -l -c "module --version" 2>&1 | grep -q "Modules based on Lua"; then
+        print_fail "Lmod not available (module --version did not return expected version string)"
+        return 1
+    fi
+    print_info "  ✓ Lmod is installed"
+
+    if ! docker exec slurmctld bash -l -c "module avail" > /dev/null 2>&1; then
+        print_fail "module avail failed"
+        return 1
+    fi
+    print_info "  ✓ module avail works"
+
+    print_pass "Lmod module system is working"
+}
+
+test_spack() {
+    print_test "Testing Spack + Lmod integration..."
+
+    # Spack is baked into the image at /usr/local/spack (not cloned at runtime)
+    if ! docker exec slurmctld test -f /usr/local/spack/share/spack/setup-env.sh 2>/dev/null; then
+        print_fail "Spack not found at /usr/local/spack (image build issue?)"
+        return 1
+    fi
+    print_info "  ✓ Spack present in image"
+
+    # Verify setup-env.sh can be sourced and spack command works
+    if ! docker exec slurmctld bash -c "export SPACK_ROOT=/usr/local/spack && source /usr/local/spack/share/spack/setup-env.sh && spack --version" > /dev/null 2>&1; then
+        print_fail "Failed to source Spack environment"
+        return 1
+    fi
+    print_info "  ✓ Spack environment loads"
+
+    # Verify Lmod modules.yaml is configured
+    if ! docker exec slurmctld grep -q "lmod" /usr/local/spack/etc/spack/modules.yaml 2>/dev/null; then
+        print_fail "Spack Lmod module configuration missing"
+        return 1
+    fi
+    print_info "  ✓ Lmod integration configured"
+
+    # Verify MODULEPATH includes the Spack Core dir on first login (baked into lmod.sh at build time)
+    if ! docker exec slurmctld bash -l -c 'echo "$MODULEPATH"' 2>/dev/null | grep -q "/opt/spack/modules/"; then
+        print_fail "MODULEPATH does not include Spack module tree (check /etc/profile.d/lmod.sh)"
+        return 1
+    fi
+    print_info "  ✓ MODULEPATH includes Spack module tree"
+
+    # Install gmake via Spack and verify it can be loaded as an Lmod module.
+    # gmake has no dependencies so it builds quickly.
+    print_info "  Installing gmake via Spack (this may take a few minutes)..."
+    if ! docker exec slurmctld bash -l -c "spack install gmake" > /dev/null 2>&1; then
+        print_fail "spack install gmake failed"
+        return 1
+    fi
+    print_info "  ✓ spack install gmake succeeded"
+
+    if ! docker exec slurmctld bash -l -c "module --ignore_cache avail 2>&1 | grep -q gmake"; then
+        print_fail "gmake module not visible after spack install"
+        return 1
+    fi
+    print_info "  ✓ gmake module visible in module avail"
+
+    if ! docker exec slurmctld bash -l -c "module load \$(module --ignore_cache avail -t 2>&1 | grep gmake | head -1) && gmake --version" > /dev/null 2>&1; then
+        print_fail "module load gmake failed or gmake --version did not run"
+        return 1
+    fi
+    print_info "  ✓ gmake module loads and binary is executable"
+
+    print_pass "Spack + Lmod integration is ready"
+}
+
 # Main test execution
 main() {
     # Ensure .env exists - copy from .env.example if not present
@@ -737,17 +788,19 @@ main() {
     test_job_submission || true
     test_job_execution || true
     test_job_accounting || true
-    test_multi_node_job || true
     test_resource_limits || true
     test_scale_up || true
-    test_scale_down || true
-    test_python_version || true
+    test_multi_node_job || true
     test_singularity_pull_image || true
     test_singularity_multi_node_job || true
+    test_scale_down || true
+    test_python_version || true
     test_rest_api_nodes || true
     test_rest_api_partitions || true
     test_get_jwt_token || true
     test_validate_jwt_authentication || true
+    test_lmod || true
+    test_spack || true
 
     # Print summary
     echo ""

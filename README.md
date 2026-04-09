@@ -21,14 +21,11 @@ docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:25.11.4
 # Option B: Build from source
 make build
 
-# Start the cluster
+# Then, start the cluster
 make up
-make status             # verify nodes are idle
-make test               # run full test suite
-make help               # see all available commands
 ```
 
-**Supported Slurm versions:** 25.11.x, 25.05.x (last two Major.Minor releases)
+**Supported Slurm versions:** 25.11, 25.05
 
 **Supported architectures (auto-detected):** AMD64, ARM64
 
@@ -194,7 +191,36 @@ make test-gpu
 
 > **Note:** GPU testing is not included in CI (GitHub-hosted runners have no GPUs). Run `make test-gpu` manually on a host with an NVIDIA GPU and `nvidia-container-toolkit` installed.
 
+## 📦 Software Installation
+
+[Spack](https://spack.io) is included in the image and integrates with [Lmod](https://lmod.readthedocs.io) so installed packages appear immediately as modules. All nodes share the same Spack and module tree.
+
+```bash
+make shell
+
+spack install python@3.14
+module avail
+module load python/3.14.0
+python --version
+```
+
+Modules are also available in batch jobs without any extra setup:
+
+```bash
+sbatch --wrap="module load python/3.14.0 && python3 --version"
+```
+
+To add a custom modulefile outside of Spack, drop a `.lua` file into the `opt_modulefiles` volume — it appears immediately on all nodes without a restart:
+
+```bash
+docker exec slurmctld mkdir -p /opt/modulefiles/myapp
+docker cp myapp/1.0.lua slurmctld:/opt/modulefiles/myapp/1.0.lua
+module avail
+```
+
 ## 🔄 Cluster Management
+
+Run `make` to see all available commands. Common ones:
 
 ```bash
 make down     # Stop cluster (keeps data)
@@ -202,8 +228,6 @@ make clean    # Remove all containers and volumes
 make rebuild  # Clean, rebuild, and restart
 make logs     # View container logs
 ```
-
-> **Note:** If `ELASTICSEARCH_HOST` is set in `.env`, monitoring containers are automatically managed.
 
 ## 🐳 Docker Hub
 

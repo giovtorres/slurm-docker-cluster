@@ -5,6 +5,8 @@
 
 ARG SLURM_VERSION
 ARG GOSU_VERSION=1.19
+ARG LMOD_VERSION=9.1.2
+ARG SPACK_VERSION=v1.1.1
 # BUILDER_BASE and RUNTIME_BASE overridden when GPU_ENABLE=true is set in .env
 ARG BUILDER_BASE=rockylinux/rockylinux:9
 ARG RUNTIME_BASE=rockylinux/rockylinux:9
@@ -118,7 +120,70 @@ RUN set -ex \
     && ls -lh /root/rpmbuild/RPMS/${RPM_ARCH}/
 
 # ============================================================================
-# Stage 3: Runtime image
+# Stage 3: Build Lmod from source
+# (hardcoded Rocky Linux 9 base — GPU CUDA images are not needed to build Lmod)
+# ============================================================================
+FROM rockylinux/rockylinux:9 AS lmod-builder
+
+ARG LMOD_VERSION
+
+RUN set -ex \
+    && dnf -y install dnf-plugins-core epel-release \
+    && dnf config-manager --set-enabled crb \
+    && dnf -y install \
+       bc \
+       gcc \
+       lua \
+       lua-devel \
+       lua-posix \
+       lua-filesystem \
+       tcl \
+       tcl-devel \
+       procps-ng \
+       python3 \
+       wget \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+RUN set -ex \
+    && wget -O /tmp/Lmod-${LMOD_VERSION}.tar.gz \
+       https://github.com/TACC/Lmod/archive/refs/tags/${LMOD_VERSION}.tar.gz \
+    && tar -xzf /tmp/Lmod-${LMOD_VERSION}.tar.gz -C /tmp \
+    && cd /tmp/Lmod-${LMOD_VERSION} \
+    && ./configure --prefix=/usr/local \
+    && make install
+
+# ============================================================================
+# Stage 4: Clone Spack from source
+# (hardcoded Rocky Linux 9 — no GPU overhead needed for this stage)
+# ============================================================================
+FROM rockylinux/rockylinux:9 AS spack-builder
+
+ARG SPACK_VERSION
+
+RUN dnf -y install git gcc && dnf clean all
+
+RUN git clone --depth=1 --branch "${SPACK_VERSION}" \
+        https://github.com/spack/spack.git /usr/local/spack
+
+# Write site-level Spack config:
+# - modules.yaml: generate Lmod modulefiles using the system GCC as the core compiler
+# - config.yaml:  store installed packages and generated modules under /opt/spack (the named volume)
+# - packages.yaml: pin target to the base ISA (x86_64 or aarch64) so the module
+#                  path is predictable and matches the MODULEPATH baked into lmod.sh
+RUN set -ex \
+    && GCC_VER=$(gcc --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) \
+    && ARCH=$(uname -m) \
+    && mkdir -p /usr/local/spack/etc/spack \
+    && printf 'modules:\n  default:\n    enable:\n      - lmod\n    roots:\n      lmod: /opt/spack/modules\n    lmod:\n      core_compilers:\n        - gcc@%s\n' \
+         "${GCC_VER}" > /usr/local/spack/etc/spack/modules.yaml \
+    && printf 'config:\n  install_tree:\n    root: /opt/spack\n' \
+         > /usr/local/spack/etc/spack/config.yaml \
+    && printf 'packages:\n  all:\n    require:\n      - "target=%s"\n' \
+         "${ARCH}" > /usr/local/spack/etc/spack/packages.yaml
+
+# ============================================================================
+# Stage 5: Runtime image
 # ============================================================================
 FROM ${RUNTIME_BASE}
 
@@ -141,7 +206,13 @@ RUN set -ex \
        apptainer \
        bash-completion \
        bzip2 \
+       bzip2-devel \
+       file \
+       gcc \
+       gcc-c++ \
+       gcc-gfortran \
        gettext \
+       git \
        hdf5 \
        http-parser \
        hwloc \
@@ -150,18 +221,24 @@ RUN set -ex \
        libaec \
        libyaml \
        lua \
+       lua-posix \
+       lua-filesystem \
        lz4 \
+       make \
        mariadb \
        munge \
        numactl \
        openssh-server \
+       patch \
        perl \
        procps-ng \
        psmisc \
        python3.12 \
        readline \
+       tcl \
        vim-enhanced \
        wget \
+       xz \
        libjwt \
     && dnf clean all \
     && rm -rf /var/cache/dnf \
@@ -171,9 +248,28 @@ RUN set -ex \
     && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
-# Install gosu (built from source in stage 1)
+# Install gosu
 COPY --from=gosu-builder /go/bin/gosu /usr/local/bin/gosu
 RUN gosu --version && gosu nobody true
+
+# Install Lmod
+COPY --from=lmod-builder /usr/local/lmod /usr/local/lmod
+
+# Install Spack
+COPY --from=spack-builder /usr/local/spack /usr/local/spack
+
+# Configure Lmod system-wide and source Spack's shell integration.
+# MODULEPATH uses the base ISA arch (x86_64/aarch64 from uname -m) which matches
+# the target forced in packages.yaml, avoiding microarch mismatches (e.g. zen2).
+RUN ARCH=$(uname -m) \
+    && printf '%s\n' \
+      'source /usr/local/lmod/lmod/init/bash' \
+      'export SPACK_ROOT=/usr/local/spack' \
+      "export MODULEPATH=\"/opt/spack/modules/linux-rocky9-${ARCH}/Core:/opt/modulefiles\"" \
+      'source /usr/local/spack/share/spack/setup-env.sh' \
+      > /etc/profile.d/lmod.sh \
+    && chmod 644 /etc/profile.d/lmod.sh \
+    && mkdir -p /opt/modulefiles /opt/spack /opt/spack/modules
 
 COPY --from=builder /root/rpmbuild/RPMS/*/*.rpm /tmp/rpms/
 
@@ -248,6 +344,7 @@ RUN set -ex \
     && chmod 644 /etc/slurm/slurm.conf /etc/slurm/cgroup.conf \
     && chmod 600 /etc/slurm/slurmdbd.conf \
     && rm -rf /tmp/slurm-config
+
 COPY --chown=slurm:slurm --chmod=0600 examples /root/examples
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
