@@ -1,0 +1,21 @@
+# Tiny biomero-aware layer on top of upstream giovtorres/slurm-docker-cluster.
+#
+# Adds p7zip/p7zip-plugins, which biomero's `_SLURM_Image_Transfer.py` uses
+# (`7z x ...`) to unpack OME-ZARR exports on the slurmctld side. The upstream
+# image does not ship `7z`; without it, every workflow that transfers data
+# fails *before* the conversion step even submits an sbatch job.
+#
+# Build:
+#   cd /root/biomero/slurm-docker-cluster
+#   docker build -t slurm-docker-cluster:25.11.4 -f Dockerfile.biomero .
+#
+# Retag pattern matches what the overlay's `image:` field already expects, so
+# no compose changes are needed. Both slurmctld and workers will pick this up
+# (they share the same image).
+
+ARG UPSTREAM_TAG=25.11.4-2.3.1
+FROM giovtorres/slurm-docker-cluster:${UPSTREAM_TAG}
+
+RUN dnf install -y p7zip p7zip-plugins \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf

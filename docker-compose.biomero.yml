@@ -1,0 +1,166 @@
+# Compose overlay to make slurm-docker-cluster a drop-in replacement for
+# NL-BIOMERO-Local-Slurm.
+#
+# What it does:
+#   - Attaches slurmctld to the biomero stack's external `nl-biomero_omero`
+#     network, so biomeroworker can resolve `slurmctld` by name and SSH in.
+#     (Required — see [[biomero-slurm-link]]: slurm joins biomero, not the
+#     other way around, to avoid breaking OMERO Ice.)
+#
+# What it does NOT do — set these via `.env` instead:
+#   SSH_PORT=2222                              # match biomero's existing ssh.config
+#   SSH_ENABLE=true                            # slurmctld must run sshd
+#   SSH_AUTHORIZED_KEYS=/root/.ssh/id_rsa.pub  # the pubkey biomeroworker uses
+#   CPU_WORKER_COUNT=2                         # matches the c1/c2 layout
+#   COMPOSE_PROJECT_NAME=nl-biomero-local-slurm  # optional, only if you want
+#                                                # to share the biomero project's
+#                                                # naming conventions. Otherwise
+#                                                # the default project name is
+#                                                # `slurm-docker-cluster`.
+#
+# Image build: the overlay points slurmdbd's `build:` at `Dockerfile.biomero`,
+# a tiny layer on top of the upstream image that adds `p7zip`/`p7zip-plugins`
+# (biomero's `_SLURM_Image_Transfer.py` shells out to `7z x` to unpack
+# OME-ZARR exports — the upstream image doesn't ship 7z). slurmdbd is the
+# only service in the base compose with a `build:` block; everything else
+# (slurmctld, slurmrestd, cpu-worker, gpu-worker) shares the same image tag,
+# so building once via slurmdbd covers the whole stack.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.biomero.yml build
+#   # → builds slurm-docker-cluster:25.11.4 via Dockerfile.biomero
+#
+# Faster path — skip the local build by pulling the upstream prebuilt image,
+# adding the p7zip layer on top, and tagging to the local name (do this on a
+# clean machine, or any time you want a fresh image without `compose build`):
+#
+#   # CPU-only host (this machine):
+#   docker pull giovtorres/slurm-docker-cluster:25.11.4-2.3.1
+#   docker build -t slurm-docker-cluster:25.11.4 -f Dockerfile.biomero .
+#
+#   # GPU host (NVIDIA, with nvidia-container-toolkit installed):
+#   docker pull giovtorres/slurm-docker-cluster:25.11.4-gpu-2.3.1
+#   docker build -t slurm-docker-cluster:25.11.4 \
+#                --build-arg UPSTREAM_TAG=25.11.4-gpu-2.3.1 -f Dockerfile.biomero .
+#   # plus, in .env: GPU_ENABLE=true GPU_WORKER_COUNT=1
+#   # plus, on `up -d`: --profile gpu
+#
+# Both prebuilt images carry the upstream "wrapper" version (2.3.1) in the
+# tag; the SLURM_VERSION env var stays 25.11.4 because that's the Slurm
+# release inside. The GPU image is a superset (CUDA libs + nvidia bits) —
+# it works on a CPU-only host with just unused weight, so prefer the CPU
+# image when GPU isn't needed.
+#
+# Usage:
+#   1. Bring down NL-BIOMERO-Local-Slurm first (container_name=slurmctld
+#      collides between the two stacks).
+#        (cd ../NL-BIOMERO-Local-Slurm && docker compose down)
+#   2. Ensure the biomero stack is up so the `nl-biomero_omero` network exists.
+#        (cd ../NL-BIOMERO && docker compose up -d)
+#   3. Build (or pre-pull + build, as above) the biomero-aware image.
+#   4. Bring this stack up with the overlay merged in:
+#        docker compose -f docker-compose.yml \
+#                       -f docker-compose.biomero.yml \
+#                       up -d
+#      For GPU, append `--profile gpu` to the same command.
+#
+# Verification:
+#   /root/biomero/scripts/claude/slurm-status.sh
+#   /root/biomero/scripts/claude/slurm-node-identity-check.sh cpu-worker-1 cpu-worker-2
+
+services:
+  # Shared /home/slurm volume — biomero submits sbatch from inside the slurm
+  # user's home over SSH, so the job's submit-dir is /home/slurm. Slurm writes
+  # the default stdout file (slurm-%A_%a.out) into that dir on the worker.
+  # If /home/slurm only exists on slurmctld (created by our entrypoint
+  # wrapper) and not on the workers, the job dies with:
+  #   _init_task_stdio_fds: Could not open stdout file '/home/slurm/slurm-N.out'
+  # The legacy NL-BIOMERO-Local-Slurm stack solved this with a shared
+  # `home_cache` named volume mounted on slurmctld + every worker; we do the
+  # same here. The slurmctld entrypoint wrapper initializes the volume's
+  # ownership and .ssh contents; workers just consume the already-prepared
+  # mount.
+  cpu-worker:
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+      - home_ood:/home/ood
+      - opt_modulefiles:/opt/modulefiles
+      - spack_root:/opt/spack
+      - home_slurm:/home/slurm
+  gpu-worker:
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+      - home_ood:/home/ood
+      - opt_modulefiles:/opt/modulefiles
+      - spack_root:/opt/spack
+      - home_slurm:/home/slurm
+
+  slurmdbd:
+    # Point the base compose's only `build:` block at our biomero-aware
+    # Dockerfile so `docker compose build` / `up --build` produce an image
+    # with `7z` (and any future biomero-required tools). slurmdbd is the
+    # service that "owns" the image build in the upstream compose; the
+    # other services just consume the resulting `slurm-docker-cluster:<ver>`
+    # tag, so we don't need to override `build:` on each of them.
+    build:
+      context: .
+      dockerfile: Dockerfile.biomero
+      args:
+        UPSTREAM_TAG: ${UPSTREAM_TAG:-25.11.4-2.3.1}
+
+  slurmctld:
+    # Compose merges list-typed `networks:` by REPLACEMENT (not append), so we
+    # must restate `slurm-network` here alongside the new external attachment.
+    networks:
+      - slurm-network
+      - omero
+    # Same list-replacement rule applies to volumes — restate every mount the
+    # base compose declares for slurmctld, then add `home_slurm:/home/slurm`
+    # so this and the workers share a single /home/slurm tree.
+    volumes:
+      - etc_munge:/etc/munge:z
+      - etc_slurm:/etc/slurm:z
+      - slurm_jobdir:/data:z
+      - var_log_slurm:/var/log/slurm:z
+      - opt_modulefiles:/opt/modulefiles
+      - spack_root:/opt/spack
+      - ${SSH_AUTHORIZED_KEYS:-/dev/null}:/tmp/authorized_keys_host:ro,z
+      - home_slurm:/home/slurm
+    # biomeroworker's ssh.config logs in as `slurm@slurmctld:22`, but the
+    # upstream entrypoint only authorizes the host pubkey for root. Wrap the
+    # entrypoint with a small prep step that also installs the pubkey into
+    # /home/slurm/.ssh (which the image doesn't create) before handing off to
+    # the original entrypoint. SSH_ENABLE=true must be set in `.env`.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ -f /tmp/authorized_keys_host ]; then
+          install -d -m 700 -o slurm -g slurm /home/slurm /home/slurm/.ssh
+          install -m 600 -o slurm -g slurm /tmp/authorized_keys_host /home/slurm/.ssh/authorized_keys
+        fi
+        # /data is the slurm_jobdir volume shared with all workers; biomero
+        # writes scripts, data, and singularity images under /data/my-scratch
+        # as the `slurm` user, so the root of the volume must be slurm-owned.
+        chown slurm:slurm /data
+        exec /usr/local/bin/docker-entrypoint.sh "$@"
+      - biomero-wrapper
+
+volumes:
+  # Shared between slurmctld + workers; see the comment on `cpu-worker` above
+  # for why this is needed.
+  home_slurm:
+
+networks:
+  # Declare the external network so this compose project can reference it.
+  # `name:` points at the network the biomero stack created (default project
+  # name `nl-biomero` + network key `omero`). If you renamed the biomero
+  # COMPOSE_PROJECT_NAME, update this value.
+  omero:
+    name: nl-biomero_omero
+    external: true
