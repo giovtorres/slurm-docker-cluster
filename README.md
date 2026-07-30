@@ -280,6 +280,10 @@ docker buildx build --platform linux/arm64 \
   --load -t slurm-docker-cluster:25.05.7 .
 ```
 
+### Windows subsystem for Linux
+
+Slurm's NVIDIA GPU autodetection doesn't currently work in WSL. To workaround this issue set `IS_WSL=true` in `.env`. The docker images will need to be rebuilt after setting this.
+
 ## 📚 Documentation
 
 - **Commands:** Run `make help` for all available commands

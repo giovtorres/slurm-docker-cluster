@@ -30,6 +30,7 @@ services:
         GPU_ENABLE: ${GPU_ENABLE:-false}
         BUILDER_BASE: ${BUILDER_BASE:-rockylinux/rockylinux:9}
         RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
+        IS_WSL: ${IS_WSL:-false}
       cache_from:
         - slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
     init: true

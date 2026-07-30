@@ -195,6 +195,7 @@ LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docke
 ARG SLURM_VERSION
 ARG TARGETARCH
 ARG GPU_ENABLE
+ARG IS_WSL
 
 # Enable CRB and EPEL repositories, then install runtime dependencies
 RUN set -ex \
@@ -333,8 +334,13 @@ RUN set -ex \
          cp /tmp/slurm-config/common/cgroup.conf /etc/slurm/cgroup.conf; \
        fi \
     && if [ "$GPU_ENABLE" = "true" ]; then \
-         echo "GPU support enabled, installing gres.conf"; \
-         cp /tmp/slurm-config/common/gres.conf /etc/slurm/gres.conf; \
+         if [ "$IS_WSL" = "true" ]; then \
+           echo "GPU support enabled for WSL, installing gres-wsl.conf"; \
+           cp /tmp/slurm-config/common/gres-wsl.conf /etc/slurm/gres.conf; \
+         else \
+           echo "GPU support enabled, installing gres.conf"; \
+           cp /tmp/slurm-config/common/gres.conf /etc/slurm/gres.conf; \
+         fi; \
          chown slurm:slurm /etc/slurm/gres.conf; \
          chmod 644 /etc/slurm/gres.conf; \
        else \
