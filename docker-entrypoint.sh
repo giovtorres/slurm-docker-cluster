@@ -188,7 +188,7 @@ then
     echo "---> Dynamic GPU worker registering as: ${NODE_NAME}"
     echo "---> Starting slurmd in dynamic GPU registration mode (-Z)..."
 
-    GPU_COUNT=$(ls /dev/nvidia[0-9] 2>/dev/null | wc -l)
+    GPU_COUNT=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -n1)
     exec /usr/sbin/slurmd -Z -Dvvv \
         --conf "Feature=gpu Gres=gpu:nvidia:${GPU_COUNT}"
 fi
