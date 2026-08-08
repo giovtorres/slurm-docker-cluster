@@ -46,10 +46,10 @@ RUN --mount=from=slurm-base,source=/var/cache/slurm-rpms,target=/tmp/rpms \
     dnf -y install /tmp/rpms/slurm-[0-9]*.rpm /tmp/rpms/slurm-contribs-*.rpm /tmp/rpms/slurm-devel-*.rpm \
     && dnf clean all
 
-# Install Open OnDemand
+# Install Open OnDemand (pinned release so upstream "latest" can't break builds)
 RUN set -ex \
     && rpm --import https://yum.osc.edu/ondemand/RPM-GPG-KEY-ondemand-SHA512 \
-    && dnf -y install https://yum.osc.edu/ondemand/latest/ondemand-release-web-latest-1-8.el9.noarch.rpm \
+    && dnf -y install https://yum.osc.edu/ondemand/4.2/ondemand-release-web-4.2-1.el9.noarch.rpm \
     && dnf -y install --allowerasing \
        ondemand \
        ondemand-dex \
