@@ -312,7 +312,7 @@ RUN set -x \
     && useradd -m -u 1001 ood
 
 # Copy Slurm configuration files
-# Version-specific configs: Extract major.minor from SLURM_VERSION (e.g., "24.11" from "24.11.6")
+# Version-specific configs: Extract major.minor from SLURM_VERSION (e.g., "25.11" from "25.11.6")
 COPY config/ /tmp/slurm-config/
 RUN set -ex \
     && MAJOR_MINOR=$(echo ${SLURM_VERSION} | cut -d. -f1,2) \
@@ -321,8 +321,8 @@ RUN set -ex \
          echo "Using version-specific config for ${MAJOR_MINOR}"; \
          cp /tmp/slurm-config/${MAJOR_MINOR}/slurm.conf /etc/slurm/slurm.conf; \
        else \
-         echo "No version-specific config found for ${MAJOR_MINOR}, using latest (25.11)"; \
-         cp /tmp/slurm-config/25.11/slurm.conf /etc/slurm/slurm.conf; \
+         echo "No version-specific config found for ${MAJOR_MINOR}, using latest (26.05)"; \
+         cp /tmp/slurm-config/26.05/slurm.conf /etc/slurm/slurm.conf; \
        fi \
     && cp /tmp/slurm-config/common/slurmdbd.conf /etc/slurm/slurmdbd.conf \
     && cp /tmp/slurm-config/common/job_submit.lua /etc/slurm/job_submit.lua \

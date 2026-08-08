@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 
 # Supported Slurm versions
-SUPPORTED_VERSIONS := 25.05.7 25.11.4
+SUPPORTED_VERSIONS := 25.11.7 26.05.2
 # Read default version from .env.example (source of truth)
 DEFAULT_VERSION := $(shell grep '^SLURM_VERSION=' .env.example | cut -d= -f2)
 
@@ -73,10 +73,10 @@ help:  ## Show this help message
 	@echo ""
 	@echo "Examples:"
 	@echo "  make update-slurm FILES=\"slurm.conf slurmdbd.conf\""
-	@echo "  make set-version VER=25.05.6"
+	@echo "  make set-version VER=25.11.7"
 	@echo "  make scale-cpu-workers N=3"
 	@echo "  make scale-gpu-workers N=2"
-	@echo "  make test-version VER=25.05.6"
+	@echo "  make test-version VER=25.11.7"
 	@echo ""
 	@echo "Monitoring:"
 	@echo "  Enable:  Set ELASTICSEARCH_HOST=http://elasticsearch:9200 in .env"
@@ -211,9 +211,9 @@ version:  ## Show current Slurm version
 		echo "No .env file found (default: $(DEFAULT_VERSION))"; \
 	fi
 
-set-version:  ## Set Slurm version (usage: make set-version VER=25.05.6)
+set-version:  ## Set Slurm version (usage: make set-version VER=25.11.7)
 	@if [ -z "$(VER)" ]; then \
-		echo "Error: VER parameter required. Usage: make set-version VER=25.05.6"; \
+		echo "Error: VER parameter required. Usage: make set-version VER=25.11.7"; \
 		echo "Supported versions: $(SUPPORTED_VERSIONS)"; \
 		exit 1; \
 	fi
@@ -238,9 +238,9 @@ build-all:  ## Build Docker images for all supported versions
 	echo "========================================"; \
 	docker images | grep slurm-docker-cluster
 
-test-version:  ## Test a specific version (usage: make test-version VER=25.05.6)
+test-version:  ## Test a specific version (usage: make test-version VER=25.11.7)
 	@if [ -z "$(VER)" ]; then \
-		echo "Error: VER parameter required. Usage: make test-version VER=25.05.6"; \
+		echo "Error: VER parameter required. Usage: make test-version VER=25.11.7"; \
 		echo "Supported versions: $(SUPPORTED_VERSIONS)"; \
 		exit 1; \
 	fi
