@@ -20,11 +20,11 @@ services:
       start_period: 30s
 
   slurmdbd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
+    image: slurm-docker-cluster:${SLURM_VERSION:-26.05.2}
     build:
       context: .
       args:
-        SLURM_VERSION: ${SLURM_VERSION:-25.11.4}
+        SLURM_VERSION: ${SLURM_VERSION:-26.05.2}
         LMOD_VERSION: ${LMOD_VERSION:-9.1.2}
         SPACK_VERSION: ${SPACK_VERSION:-v1.1.1}
         GPU_ENABLE: ${GPU_ENABLE:-false}
@@ -32,7 +32,7 @@ services:
         RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
         IS_WSL: ${IS_WSL:-false}
       cache_from:
-        - slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
+        - slurm-docker-cluster:${SLURM_VERSION:-26.05.2}
     init: true
     command: ["slurmdbd"]
     container_name: slurmdbd
@@ -59,7 +59,7 @@ services:
       start_period: 20s
 
   slurmctld:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
+    image: slurm-docker-cluster:${SLURM_VERSION:-26.05.2}
     init: true
     command: ["slurmctld"]
     container_name: slurmctld
@@ -94,7 +94,7 @@ services:
       start_period: 20s
 
   slurmrestd:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
+    image: slurm-docker-cluster:${SLURM_VERSION:-26.05.2}
     init: true
     command: ["slurmrestd"]
     container_name: slurmrestd
@@ -121,7 +121,7 @@ services:
       start_period: 20s
 
   cpu-worker:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
+    image: slurm-docker-cluster:${SLURM_VERSION:-26.05.2}
     init: true
     command: ["slurmd-cpu"]
     working_dir: /data
@@ -155,7 +155,7 @@ services:
   # GPU compute node (NVIDIA)
   # Requires: GPU_ENABLE=true in .env and nvidia-container-toolkit installed on host
   gpu-worker:
-    image: slurm-docker-cluster:${SLURM_VERSION:-25.11.4}
+    image: slurm-docker-cluster:${SLURM_VERSION:-26.05.2}
     init: true
     command: ["slurmd-gpu"]
     working_dir: /data
@@ -201,7 +201,7 @@ services:
       context: .
       dockerfile: Dockerfile.ondemand
       args:
-        SLURM_VERSION: ${SLURM_VERSION:-25.11.4}
+        SLURM_VERSION: ${SLURM_VERSION:-26.05.2}
         RUNTIME_BASE: ${RUNTIME_BASE:-rockylinux/rockylinux:9}
     profiles: ["ondemand"]
     container_name: ondemand

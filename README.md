@@ -16,7 +16,7 @@ cp .env.example .env    # optional: edit to change version, enable GPU, etc.
 
 # Option A: Pull pre-built image from Docker Hub (fastest)
 docker pull giovtorres/slurm-docker-cluster:latest
-docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:25.11.4
+docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:26.05.2
 
 # Option B: Build from source
 make build
@@ -25,7 +25,7 @@ make build
 make up
 ```
 
-**Supported Slurm versions:** 25.11, 25.05
+**Supported Slurm versions:** 26.05, 25.11
 
 **Supported architectures (auto-detected):** AMD64, ARM64
 
@@ -98,7 +98,7 @@ Verify with `make status`.
 
 ### REST API
 
-Query cluster via REST API (version auto-detected: v0.0.44 for 25.11.x, v0.0.42 for 25.05.x):
+Query cluster via REST API (version auto-detected: v0.0.45 for 26.05.x, v0.0.44 for 25.11.x):
 
 ```bash
 # Get JWT Token
@@ -106,11 +106,11 @@ JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut 
 
 # Get nodes
 docker exec slurmrestd curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
-  http://localhost:6820/slurm/v0.0.42/nodes | jq .nodes
+  http://localhost:6820/slurm/v0.0.45/nodes | jq .nodes
 
 # Get partitions
 docker exec slurmrestd curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
-  http://localhost:6820/slurm/v0.0.42/partitions | jq .partitions
+  http://localhost:6820/slurm/v0.0.45/partitions | jq .partitions
 ```
 
 ### Elasticsearch and Kibana (Optional)
@@ -236,13 +236,13 @@ Pre-built multi-arch images (amd64 + arm64) are published on each [GitHub releas
 ```bash
 # CPU images
 docker pull giovtorres/slurm-docker-cluster:latest
-docker pull giovtorres/slurm-docker-cluster:25.11.4          # latest build for this Slurm version
-docker pull giovtorres/slurm-docker-cluster:25.11.4-2.1.0   # pinned to a specific release
+docker pull giovtorres/slurm-docker-cluster:26.05.2          # latest build for this Slurm version
+docker pull giovtorres/slurm-docker-cluster:26.05.2-2.1.0   # pinned to a specific release
 
 # GPU images (built on nvidia/cuda base)
 docker pull giovtorres/slurm-docker-cluster:latest-gpu
-docker pull giovtorres/slurm-docker-cluster:25.11.4-gpu
-docker pull giovtorres/slurm-docker-cluster:25.11.4-gpu-2.1.0
+docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu
+docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu-2.1.0
 ```
 
 ## ⚙️ Advanced
@@ -250,7 +250,7 @@ docker pull giovtorres/slurm-docker-cluster:25.11.4-gpu-2.1.0
 ### Version Management
 
 ```bash
-make set-version VER=25.05.7   # Switch Slurm version
+make set-version VER=25.11.7   # Switch Slurm version
 make version                   # Show current version
 make build-all                 # Build all supported versions
 make test-all                  # Test all versions
@@ -264,7 +264,7 @@ docker exec -it slurmctld vi /etc/slurm/slurm.conf
 make reload-slurm
 
 # Push local changes
-vi config/25.05/slurm.conf
+vi config/26.05/slurm.conf
 make update-slurm FILES="slurm.conf"
 
 # Permanent changes
@@ -276,8 +276,8 @@ make rebuild
 ```bash
 # Cross-platform build (uses QEMU emulation)
 docker buildx build --platform linux/arm64 \
-  --build-arg SLURM_VERSION=25.05.7 \
-  --load -t slurm-docker-cluster:25.05.7 .
+  --build-arg SLURM_VERSION=26.05.2 \
+  --load -t slurm-docker-cluster:26.05.2 .
 ```
 
 ### Windows subsystem for Linux
