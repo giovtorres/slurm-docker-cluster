@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Test suite for the monitoring profile (Elasticsearch + Kibana)
 # Run with: ./test_monitoring.sh

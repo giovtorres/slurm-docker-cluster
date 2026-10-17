@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Detect if running in CI
 CI_MODE=${CI:-false}

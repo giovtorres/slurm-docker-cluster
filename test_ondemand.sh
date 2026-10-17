@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Test suite for the Open OnDemand profile
 # Run with: ./test_ondemand.sh

@@ -1,4 +1,4 @@
-.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu test-ondemand status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples scale-cpu-workers scale-gpu-workers podman-check
+.PHONY: help build build-no-cache up start down clean logs test test-monitoring test-gpu test-ondemand status shell logs-slurmctld logs-slurmdbd update-slurm reload-slurm version set-version build-all test-all test-version rebuild jobs quick-test run-examples scale-cpu-workers scale-gpu-workers podman-check docker-check
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,6 +15,12 @@ OOD_ENABLE := $(shell grep -E '^OOD_ENABLE=' .env 2>/dev/null | cut -d= -f2)
 
 # Detect container runtime (docker or podman)
 CONTAINER_RUNTIME := $(shell if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then echo "podman"; else echo "docker"; fi)
+FOUND_PODMAN := $(shell command -v podman 2>/dev/null)
+ifeq ($(CONTAINER_RUNTIME),docker)
+  ifneq ($(FOUND_PODMAN),)
+    $(warning Warning: Podman is installed but 'podman info' failed. Falling back to Docker. Is the Podman machine running?)
+  endif
+endif
 
 # Add --compatibility flag for Podman to ensure Docker Compose file compatibility
 COMPOSE_COMPAT := $(if $(findstring podman,$(CONTAINER_RUNTIME)),--compatibility,)
@@ -245,20 +251,33 @@ set-version:  ## Set Slurm version (usage: make set-version VER=25.11.7)
 
 build-all:  ## Build Docker images for all supported versions
 	@echo "Building all supported Slurm versions..."
-	@for version in $(SUPPORTED_VERSIONS); do \
+	@FAILED=0; \
+	for version in $(SUPPORTED_VERSIONS); do \
 		echo ""; \
 		echo "========================================"; \
 		echo "Building Slurm $$version"; \
 		echo "========================================"; \
 		echo "SLURM_VERSION=$$version" > .env; \
-		$(COMPOSE_CMD) build || exit 1; \
+		if ! $(COMPOSE_CMD) build; then \
+			echo "✗ Failed to build Slurm $$version"; \
+			FAILED=1; \
+			break; \
+		fi; \
 		echo "✓ Built slurm-docker-cluster:$$version"; \
-	done
-	@echo ""
-	@echo "========================================"; \
-	echo "✓ All versions built successfully"; \
-	echo "========================================"; \
-	$(COMPOSE_CMD) images | grep slurm-docker-cluster
+	done; \
+	if [ $$FAILED -eq 0 ]; then \
+		echo ""; \
+		echo "========================================"; \
+		echo "✓ All versions built successfully"; \
+		echo "========================================"; \
+		$(COMPOSE_CMD) images | grep slurm-docker-cluster || true; \
+	else \
+		echo ""; \
+		echo "========================================"; \
+		echo "✗ Build failed"; \
+		echo "========================================"; \
+		exit 1; \
+	fi
 
 test-version:  ## Test a specific version (usage: make test-version VER=25.11.7)
 	@if [ -z "$(VER)" ]; then \
