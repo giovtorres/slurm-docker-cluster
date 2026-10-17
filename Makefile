@@ -48,6 +48,7 @@ help:  ## Show this help message
 	@echo "=========================================="
 	@echo ""
 	@echo "Container Runtime: $(CONTAINER_RUNTIME)"
+	@echo "COMPOSE_CMD: $(COMPOSE_CMD)"
 	@echo ""
 	@echo "Cluster Management:"
 	@printf "  ${CYAN}%-20s${RESET} %s\n" "build" "Build Docker images"
@@ -106,10 +107,11 @@ help:  ## Show this help message
 	@echo "  Disable: Comment out or remove OOD_ENABLE from .env"
 	@echo "  Access:  http://localhost:8080 (login: ood@localhost / password)"
 	@echo ""
-	@echo "Podman Support:"
-	@echo "  The cluster works with Podman as a drop-in replacement for Docker."
-	@echo "  Run 'make podman-check' to verify Podman compatibility."
-	@echo "  See README-Podman.md for detailed Podman setup instructions."
+	@echo "Container Runtimes:"
+	@echo "  The cluster works with Docker or Podman as drop-in replacements."
+	@echo "  Run 'make podman-check' to see current runtime."
+	@echo "  Run 'make docker-check' to verify Docker is available."
+	@echo "  See README.md 'Container Runtimes' section for setup details."
 
 build:  ## Build Docker images
 	$(COMPOSE_CMD) --progress plain build
@@ -301,8 +303,16 @@ podman-check:  ## Check Podman compatibility
 		echo "Podman version: $$(podman --version)"; \
 		echo "Docker Compose compatibility: enabled"; \
 	else \
-		echo "ℹ Docker is the active container runtime"; \
-		echo "To use Podman, install it first and ensure 'podman info' works"; \
+		echo "ℹ Docker is the active container runtime (or Podman not available)"; \
+	fi
+
+docker-check:  ## Check Docker compatibility
+	@if command -v docker &>/dev/null; then \
+		echo "✓ Docker is installed and accessible"; \
+		echo "Docker version: $$(docker --version)"; \
+		echo "Docker Compose version: $$(docker compose version 2>/dev/null || echo 'Docker Compose not found')"; \
+	else \
+		echo "✗ Docker is not installed or not in PATH"; \
 	fi
 
 rebuild: clean build up status

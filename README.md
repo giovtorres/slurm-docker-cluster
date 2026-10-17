@@ -249,6 +249,101 @@ docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu
 docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu-2.1.0
 ```
 
+## 🐳 Container Runtimes (Docker / Podman)
+
+This cluster works with **both Docker and Podman** as drop-in replacements for each other.
+
+### Quick Start with Docker
+
+```bash
+# Install Docker Desktop or Docker Engine
+docker --version
+make build
+make up
+```
+
+### Quick Start with Podman
+
+```bash
+# macOS (via Homebrew)
+brew install podman
+podman machine init
+podman machine start
+
+# Linux (varies by distro)
+sudo dnf install podman podman-compose   # RHEL/Fedora
+sudo apt install podman podman-compose   # Ubuntu/Debian
+
+# Verify Podman works
+podman info
+make build
+make up
+```
+
+### Runtime Detection
+
+The Makefile automatically detects which container runtime is available:
+- If **Podman** is installed and `podman info` succeeds, it uses Podman
+- Otherwise, it falls back to **Docker**
+
+You can override auto-detection by setting `CONTAINER_RUNTIME` in `.env`:
+
+```bash
+# Force Docker
+CONTAINER_RUNTIME=docker
+
+# Force Podman
+CONTAINER_RUNTIME=podman
+```
+
+### Check Current Runtime
+
+```bash
+make podman-check   # Show if Podman is active
+make docker-check   # Show if Docker is available
+make help           # See all commands including runtime info
+```
+
+### Make Commands Work Identically
+
+All `make` targets work the same regardless of runtime:
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build images |
+| `make up` | Start cluster |
+| `make down` | Stop cluster |
+| `make clean` | Remove containers and volumes |
+| `make shell` | Open shell in slurmctld |
+| `make status` | Show cluster status |
+| `make scale-cpu-workers N=3` | Scale CPU workers |
+| `make scale-gpu-workers N=2` | Scale GPU workers |
+| `make test` | Run test suite |
+
+### Podman-Specific Notes
+
+**Device Access:** When running natively (without compatibility mode), Podman may need explicit capabilities instead of `privileged: true`:
+
+```yaml
+cap_add:
+  - SYS_ADMIN
+security_opt:
+  - unconfined
+```
+
+The Makefile uses `--compatibility` flag for Podman to avoid this complexity.
+
+**GPU Support:** For NVIDIA GPUs with Podman:
+1. Install `nvidia-container-toolkit` (same as Docker)
+2. Configure Podman to use NVIDIA runtime in `/etc/containers/containers.conf`
+3. Enable `GPU_ENABLE=true` in `.env`
+
+**Rootless Mode:** Podman runs rootless by default, which may require:
+- Using rootful mode for shared volumes: `podman system migrate`
+- Or adjusting volume permissions
+
+See the full [README-Podman.md](README-Podman.md) for detailed troubleshooting and advanced configuration.
+
 ## ⚙️ Advanced
 
 ### Version Management
