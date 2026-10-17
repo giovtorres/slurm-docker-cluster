@@ -3,9 +3,19 @@ set -e
 
 # Test suite for the Open OnDemand profile
 # Run with: ./test_ondemand.sh
-# Requires: docker compose --profile ondemand up -d
 
 CI_MODE=${CI:-false}
+
+# Detect container runtime (docker or podman)
+if [ -z "$CONTAINER_RUNTIME" ]; then
+    if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
+        CONTAINER_RUNTIME="podman"
+    else
+        CONTAINER_RUNTIME="docker"
+    fi
+fi
+
+COMPOSE_CMD="$CONTAINER_RUNTIME compose"
 
 if [ "$CI_MODE" = "true" ]; then
     RED=''
@@ -53,7 +63,7 @@ print_info() {
 test_ondemand_running() {
     print_test "Checking if Open OnDemand container is running..."
 
-    if docker compose --profile ondemand ps ondemand 2>/dev/null | grep -q "Up"; then
+    if $COMPOSE_CMD --profile ondemand ps ondemand 2>/dev/null | grep -q "Up"; then
         print_pass "Open OnDemand container is running"
     else
         print_fail "Open OnDemand container is not running"
@@ -64,7 +74,7 @@ test_ondemand_running() {
 test_httpd_responding() {
     print_test "Checking if Apache httpd is responding on port 8080..."
 
-    HTTP_CODE=$(docker exec ondemand curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ 2>/dev/null || echo "000")
+    HTTP_CODE=$(run_container ondemand curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ 2>/dev/null || echo "000")
 
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "303" ]; then
         print_pass "Apache httpd is responding (HTTP $HTTP_CODE)"
@@ -77,7 +87,7 @@ test_httpd_responding() {
 test_dex_responding() {
     print_test "Checking if Dex OIDC provider is responding..."
 
-    HTTP_CODE=$(docker exec ondemand curl -s -o /dev/null -w "%{http_code}" http://localhost:5556/dex/.well-known/openid-configuration 2>/dev/null || echo "000")
+    HTTP_CODE=$(run_container ondemand curl -s -o /dev/null -w "%{http_code}" http://localhost:5556/dex/.well-known/openid-configuration 2>/dev/null || echo "000")
 
     if [ "$HTTP_CODE" = "200" ]; then
         print_pass "Dex OIDC provider is responding"
@@ -91,7 +101,7 @@ test_ood_dashboard() {
     print_test "Checking if OOD dashboard is accessible..."
 
     # The dashboard should redirect to auth or return the page
-    HTTP_CODE=$(docker exec ondemand curl -s -o /dev/null -w "%{http_code}" -L http://localhost:8080/pun/sys/dashboard 2>/dev/null || echo "000")
+    HTTP_CODE=$(run_container ondemand curl -s -o /dev/null -w "%{http_code}" -L http://localhost:8080/pun/sys/dashboard 2>/dev/null || echo "000")
 
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "303" ]; then
         print_pass "OOD dashboard is accessible (HTTP $HTTP_CODE)"
@@ -104,7 +114,7 @@ test_ood_dashboard() {
 test_slurm_commands() {
     print_test "Checking if Slurm commands work from OOD container..."
 
-    SINFO_OUTPUT=$(docker exec ondemand sinfo --version 2>&1 || echo "FAILED")
+    SINFO_OUTPUT=$(run_container ondemand sinfo --version 2>&1 || echo "FAILED")
 
     if echo "$SINFO_OUTPUT" | grep -q "slurm"; then
         print_info "  $SINFO_OUTPUT"
@@ -118,7 +128,7 @@ test_slurm_commands() {
 test_slurm_connectivity() {
     print_test "Checking Slurm cluster connectivity from OOD container..."
 
-    SINFO_OUTPUT=$(docker exec ondemand sinfo -N 2>&1 || echo "FAILED")
+    SINFO_OUTPUT=$(run_container ondemand sinfo -N 2>&1 || echo "FAILED")
 
     if echo "$SINFO_OUTPUT" | grep -q "idle\|alloc\|mix"; then
         print_info "  Cluster nodes visible from OOD container"
@@ -132,7 +142,7 @@ test_slurm_connectivity() {
 test_ood_user_exists() {
     print_test "Checking if OOD demo user exists on compute nodes..."
 
-    OOD_USER=$(docker exec slurmctld id ood 2>&1 || echo "FAILED")
+    OOD_USER=$(run_container slurmctld id ood 2>&1 || echo "FAILED")
 
     if echo "$OOD_USER" | grep -q "uid=1001"; then
         print_pass "OOD user exists on cluster nodes (uid=1001)"

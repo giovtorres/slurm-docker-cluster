@@ -4,6 +4,17 @@ set -e
 # Detect if running in CI
 CI_MODE=${CI:-false}
 
+# Detect container runtime (docker or podman)
+if [ -z "$CONTAINER_RUNTIME" ]; then
+    if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
+        CONTAINER_RUNTIME="podman"
+    else
+        CONTAINER_RUNTIME="docker"
+    fi
+fi
+
+COMPOSE_CMD="$CONTAINER_RUNTIME compose"
+
 # Colors for output (disabled in CI for better log readability)
 if [ "$CI_MODE" = "true" ]; then
     RED=''
@@ -18,6 +29,16 @@ else
     BLUE='\033[0;34m'
     NC='\033[0m' # No Color
 fi
+
+# Function to run container commands
+run_container() {
+    $COMPOSE_CMD exec -T "$@"
+}
+
+# Function to check if container is running
+is_container_up() {
+    $COMPOSE_CMD ps "$1" 2>/dev/null | grep -q "Up"
+}
 
 # Test counters
 TESTS_RUN=0
@@ -58,7 +79,7 @@ test_containers_running() {
     ALL_RUNNING=true
 
     for container in "${EXPECTED_CONTAINERS[@]}"; do
-        if docker compose ps "$container" 2>/dev/null | grep -q "Up"; then
+        if $COMPOSE_CMD ps "$container" 2>/dev/null | grep -q "Up"; then
             print_info "  ✓ $container is running"
         else
             print_fail "  ✗ $container is not running"
@@ -67,7 +88,7 @@ test_containers_running() {
     done
 
     # Check cpu-worker nodes dynamically
-    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+    WORKER_COUNT=$($COMPOSE_CMD ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$WORKER_COUNT" -gt 0 ]; then
         print_info "  ✓ $WORKER_COUNT worker node(s) running"
@@ -87,7 +108,7 @@ test_containers_running() {
 test_munge_auth() {
     print_test "Testing MUNGE authentication..."
 
-    if docker exec slurmctld bash -c "munge -n | unmunge" >/dev/null 2>&1; then
+    if run_container slurmctld bash -c "munge -n | unmunge" >/dev/null 2>&1; then
         print_pass "MUNGE authentication is working"
     else
         print_fail "MUNGE authentication failed"
@@ -98,7 +119,7 @@ test_munge_auth() {
 test_mysql_connection() {
     print_test "Testing MySQL database connection..."
 
-    if docker exec slurmdbd bash -c "echo 'SELECT 1' | mysql -h mysql -u\${MYSQL_USER} -p\${MYSQL_PASSWORD} 2>/dev/null" >/dev/null; then
+    if run_container slurmdbd bash -c "echo 'SELECT 1' | mysql -h mysql -u\${MYSQL_USER} -p\${MYSQL_PASSWORD} 2>/dev/null" >/dev/null; then
         print_pass "MySQL connection successful"
     else
         print_fail "MySQL connection failed"
@@ -109,7 +130,7 @@ test_mysql_connection() {
 test_slurmdbd_connection() {
     print_test "Testing slurmdbd daemon..."
 
-    if docker exec slurmctld sacctmgr list cluster -n 2>/dev/null | grep -q "linux"; then
+    if run_container slurmctld sacctmgr list cluster -n 2>/dev/null | grep -q "linux"; then
         print_pass "slurmdbd is responding and cluster is registered"
     else
         print_fail "slurmdbd is not responding or cluster not registered"
@@ -120,7 +141,7 @@ test_slurmdbd_connection() {
 test_slurmctld_status() {
     print_test "Testing slurmctld daemon..."
 
-    if docker exec slurmctld scontrol ping >/dev/null 2>&1; then
+    if run_container slurmctld scontrol ping >/dev/null 2>&1; then
         print_pass "slurmctld is responding"
     else
         print_fail "slurmctld is not responding"
@@ -131,10 +152,10 @@ test_slurmctld_status() {
 test_compute_nodes() {
     print_test "Testing compute nodes availability..."
 
-    NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
+    NODE_COUNT=$(run_container slurmctld sinfo -N -h | wc -l | tr -d ' ')
 
     # Count running cpu-worker nodes
-    EXPECTED_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+    EXPECTED_COUNT=$($COMPOSE_CMD ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$NODE_COUNT" -eq "$EXPECTED_COUNT" ]; then
         print_pass "$NODE_COUNT compute node(s) are available (matches expected $EXPECTED_COUNT)"
@@ -147,13 +168,13 @@ test_compute_nodes() {
 test_nodes_state() {
     print_test "Testing compute nodes state..."
 
-    IDLE_NODES=$(docker exec slurmctld sinfo -h -o "%T" | grep -c "idle" || echo "0")
+    IDLE_NODES=$(run_container slurmctld sinfo -h -o "%T" | grep -c "idle" || echo "0")
 
     if [ "$IDLE_NODES" -ge 1 ]; then
         print_pass "Compute nodes are in idle state ($IDLE_NODES nodes)"
     else
         print_fail "No compute nodes in idle state"
-        docker exec slurmctld sinfo
+        run_container slurmctld sinfo
         return 1
     fi
 }
@@ -161,7 +182,7 @@ test_nodes_state() {
 test_partition() {
     print_test "Testing partition configuration..."
 
-    if docker exec slurmctld sinfo -h | grep -q "cpu"; then
+    if run_container slurmctld sinfo -h | grep -q "cpu"; then
         print_pass "Default partition 'cpu' exists"
     else
         print_fail "Default partition 'cpu' not found"
@@ -175,8 +196,8 @@ test_config_consistency() {
     ALL_CONSISTENT=true
 
     # Get the active slurm.conf from the running container
-    SLURM_CONF=$(docker exec slurmctld cat /etc/slurm/slurm.conf 2>/dev/null)
-    ENTRYPOINT=$(docker exec slurmctld cat /usr/local/bin/docker-entrypoint.sh 2>/dev/null)
+    SLURM_CONF=$(run_container slurmctld cat /etc/slurm/slurm.conf 2>/dev/null)
+    ENTRYPOINT=$(run_container slurmctld cat /usr/local/bin/docker-entrypoint.sh 2>/dev/null)
 
     if [ -z "$SLURM_CONF" ] || [ -z "$ENTRYPOINT" ]; then
         print_fail "Could not read slurm.conf or docker-entrypoint.sh from container"
@@ -247,14 +268,14 @@ test_job_submission() {
     print_test "Testing job submission..."
 
     # Submit a simple job
-    JOB_ID=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='hostname' 2>&1" | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
+    JOB_ID=$(run_container slurmctld bash -c "cd /data && sbatch --wrap='hostname' 2>&1" | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
 
     if [ -n "$JOB_ID" ]; then
         print_info "  Job ID: $JOB_ID submitted"
 
         # Wait for job to complete (max 30 seconds)
         for i in {1..30}; do
-            JOB_STATE=$(docker exec slurmctld squeue -j "$JOB_ID" -h -o "%T" 2>/dev/null || echo "COMPLETED")
+            JOB_STATE=$(run_container slurmctld squeue -j "$JOB_ID" -h -o "%T" 2>/dev/null || echo "COMPLETED")
             if [ "$JOB_STATE" = "COMPLETED" ] || [ -z "$JOB_STATE" ]; then
                 break
             fi
@@ -272,7 +293,7 @@ test_job_execution() {
     print_test "Testing job execution and output..."
 
     # Submit a job and wait for it
-    OUTPUT=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='echo SUCCESS_TEST_\$SLURM_JOB_ID' --wait 2>&1 && sleep 2 && cat slurm-*.out | grep SUCCESS_TEST" 2>/dev/null || echo "")
+    OUTPUT=$(run_container slurmctld bash -c "cd /data && sbatch --wrap='echo SUCCESS_TEST_\$SLURM_JOB_ID' --wait 2>&1 && sleep 2 && cat slurm-*.out | grep SUCCESS_TEST" 2>/dev/null || echo "")
 
     if echo "$OUTPUT" | grep -q "SUCCESS_TEST"; then
         print_pass "Job executed and produced output"
@@ -286,7 +307,7 @@ test_job_accounting() {
     print_test "Testing job accounting..."
 
     # Check if sacct can retrieve job history
-    if docker exec slurmctld sacct -n --format=JobID -X 2>/dev/null | grep -q "[0-9]"; then
+    if run_container slurmctld sacct -n --format=JobID -X 2>/dev/null | grep -q "[0-9]"; then
         print_pass "Job accounting is working"
     else
         print_fail "Job accounting failed - no jobs recorded"
@@ -298,7 +319,7 @@ test_multi_node_job() {
     print_test "Testing multi-node job allocation..."
 
     # Try to allocate 2 nodes
-    JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 hostname" 2>&1 || echo "FAILED")
+    JOB_OUTPUT=$(run_container slurmctld bash -c "srun -N 2 hostname" 2>&1 || echo "FAILED")
 
     # Count non-empty lines in output (should be 2 hostnames)
     OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l | tr -d ' ')
@@ -316,14 +337,14 @@ test_resource_limits() {
     print_test "Testing resource limit configuration..."
 
     # Check if dynamic nodes have CPU and memory configured
-    FIRST_NODE=$(docker exec slurmctld scontrol show nodes 2>/dev/null | grep -o 'NodeName=c[0-9]*' | head -1 | cut -d= -f2)
+    FIRST_NODE=$(run_container slurmctld scontrol show nodes 2>/dev/null | grep -o 'NodeName=c[0-9]*' | head -1 | cut -d= -f2)
 
     if [ -z "$FIRST_NODE" ]; then
         print_fail "No dynamic CPU worker nodes found"
         return 1
     fi
 
-    NODE_INFO=$(docker exec slurmctld scontrol show node "$FIRST_NODE" | grep -E "CPUTot|RealMemory")
+    NODE_INFO=$(run_container slurmctld scontrol show node "$FIRST_NODE" | grep -E "CPUTot|RealMemory")
 
     if echo "$NODE_INFO" | grep -q "CPUTot=[0-9]" && echo "$NODE_INFO" | grep -q "RealMemory=[0-9]"; then
         print_pass "Resource limits configured correctly on $FIRST_NODE"
@@ -338,27 +359,27 @@ test_scale_up() {
     print_test "Testing dynamic scale-up..."
 
     # Get initial node count
-    INITIAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
+    INITIAL_COUNT=$(run_container slurmctld sinfo -N -h | wc -l | tr -d ' ')
     print_info "  Initial node count: $INITIAL_COUNT"
 
     # Get current worker count and scale up by 1
-    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+    WORKER_COUNT=$($COMPOSE_CMD ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
     TARGET=$((WORKER_COUNT + 1))
     print_info "  Scaling cpu-worker from $WORKER_COUNT to $TARGET"
 
-    docker compose up -d --scale cpu-worker=$TARGET --no-recreate >/dev/null 2>&1
+    $COMPOSE_CMD up -d --scale cpu-worker=$TARGET --no-recreate >/dev/null 2>&1
 
     # Poll until the new node appears in Slurm and is ready (max 60s)
     EXPECTED_COUNT=$((INITIAL_COUNT + 1))
     for i in $(seq 1 60); do
-        CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h 2>/dev/null | wc -l | tr -d ' ')
+        CURRENT_COUNT=$(run_container slurmctld sinfo -N -h 2>/dev/null | wc -l | tr -d ' ')
         if [ "$CURRENT_COUNT" -ge "$EXPECTED_COUNT" ]; then
             break
         fi
         sleep 1
     done
 
-    CURRENT_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
+    CURRENT_COUNT=$(run_container slurmctld sinfo -N -h | wc -l | tr -d ' ')
 
     if [ "$CURRENT_COUNT" -ne "$EXPECTED_COUNT" ]; then
         print_fail "Expected $EXPECTED_COUNT nodes after scale-up, found $CURRENT_COUNT"
@@ -368,7 +389,7 @@ test_scale_up() {
     print_info "  Node count after scale-up: $CURRENT_COUNT"
 
     # Verify all node names match c<N> pattern (no container ID fallbacks)
-    BAD_NAMES=$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+    BAD_NAMES=$(run_container slurmctld scontrol show nodes 2>/dev/null \
         | grep -o 'NodeName=[^ ]*' | cut -d= -f2 | grep -v '^c[0-9]*$' || true)
 
     if [ -n "$BAD_NAMES" ]; then
@@ -377,7 +398,7 @@ test_scale_up() {
     fi
 
     # Verify all nodes are idle
-    NON_IDLE=$(docker exec slurmctld sinfo -N -h -o "%N %T" 2>/dev/null | grep -v "idle" || true)
+    NON_IDLE=$(run_container slurmctld sinfo -N -h -o "%N %T" 2>/dev/null | grep -v "idle" || true)
 
     if [ -n "$NON_IDLE" ]; then
         print_fail "Some nodes are not idle after scale-up: $NON_IDLE"
@@ -391,18 +412,18 @@ test_scale_down() {
     print_test "Testing dynamic scale-down with stale node cleanup..."
 
     # Get current counts
-    CURRENT_NODE_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
-    WORKER_COUNT=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+    CURRENT_NODE_COUNT=$(run_container slurmctld sinfo -N -h | wc -l | tr -d ' ')
+    WORKER_COUNT=$($COMPOSE_CMD ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
 
     TARGET=$((WORKER_COUNT - 1))
     EXPECTED_COUNT=$((CURRENT_NODE_COUNT - 1))
     print_info "  Scaling cpu-worker from $WORKER_COUNT to $TARGET"
 
-    docker compose up -d --scale cpu-worker=$TARGET --no-recreate >/dev/null 2>&1
+    $COMPOSE_CMD up -d --scale cpu-worker=$TARGET --no-recreate >/dev/null 2>&1
 
     # Wait for the extra container to stop
     for i in $(seq 1 15); do
-        LIVE=$(docker compose ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+        LIVE=$($COMPOSE_CMD ps cpu-worker --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
         if [ "$LIVE" -le "$TARGET" ]; then
             break
         fi
@@ -410,21 +431,21 @@ test_scale_down() {
     done
 
     # Clean up stale nodes (mirrors Makefile scale-cpu-workers logic)
-    LIVE_NODES=$(docker compose ps cpu-worker -q 2>/dev/null \
+    LIVE_NODES=$($COMPOSE_CMD ps cpu-worker -q 2>/dev/null \
         | while read cid; do
-            docker exec "$cid" hostname 2>/dev/null
+            run_container "$cid" hostname 2>/dev/null
         done | sort)
-    SLURM_NODES=$(docker exec slurmctld scontrol show nodes 2>/dev/null \
+    SLURM_NODES=$(run_container slurmctld scontrol show nodes 2>/dev/null \
         | grep -o 'NodeName=c[0-9]*' | cut -d= -f2 | sort)
     STALE_NODES=$(comm -23 <(echo "$SLURM_NODES") <(echo "$LIVE_NODES") | paste -sd, -)
 
     if [ -n "$STALE_NODES" ]; then
         print_info "  Removing stale nodes: $STALE_NODES"
-        docker exec slurmctld scontrol delete nodename=$STALE_NODES 2>/dev/null || true
+        run_container slurmctld scontrol delete nodename=$STALE_NODES 2>/dev/null || true
     fi
 
     # Verify node count decreased
-    FINAL_COUNT=$(docker exec slurmctld sinfo -N -h | wc -l | tr -d ' ')
+    FINAL_COUNT=$(run_container slurmctld sinfo -N -h | wc -l | tr -d ' ')
 
     if [ "$FINAL_COUNT" -ne "$EXPECTED_COUNT" ]; then
         print_fail "Expected $EXPECTED_COUNT nodes after scale-down, found $FINAL_COUNT"
@@ -434,7 +455,7 @@ test_scale_down() {
     # Verify the stale node is gone
     if [ -n "$STALE_NODES" ]; then
         FIRST_STALE=$(echo "$STALE_NODES" | cut -d, -f1)
-        if docker exec slurmctld scontrol show node "$FIRST_STALE" 2>/dev/null | grep -q "NodeName"; then
+        if run_container slurmctld scontrol show node "$FIRST_STALE" 2>/dev/null | grep -q "NodeName"; then
             print_fail "Stale node $FIRST_STALE still present in Slurm"
             return 1
         fi
@@ -447,11 +468,11 @@ test_singularity_pull_image() {
     print_test "Testing Singularity image pull..."
 
     # Check if alpine_3.22.2.sif exists, if yes, remove it
-    if docker exec slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
-        docker exec slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
+    if run_container slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
+        run_container slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
     fi
 
-    if docker exec slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
+    if run_container slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
         print_pass "Singularity image pull successful"
     else
         print_fail "Singularity image pull failed"
@@ -463,21 +484,21 @@ test_singularity_multi_node_job() {
     print_test "Testing Singularity multi-node job..."
 
     # Check if alpine_3.22.2.sif exists, if not, pull it
-    if ! docker exec slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
-        if ! docker exec slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
+    if ! run_container slurmctld test -f alpine_3.22.2.sif >/dev/null 2>&1; then
+        if ! run_container slurmctld singularity pull docker://alpine:3.22.2 >/dev/null 2>&1; then
             print_fail "Failed to pull Singularity image"
             return 1
         fi
     fi
 
     # Run the multi-node singularity job
-    JOB_OUTPUT=$(docker exec slurmctld bash -c "srun -N 2 singularity exec alpine_3.22.2.sif /bin/sh -c 'cat /etc/alpine-release'" 2>&1 || echo "FAILED")
+    JOB_OUTPUT=$(run_container slurmctld bash -c "srun -N 2 singularity exec alpine_3.22.2.sif /bin/sh -c 'cat /etc/alpine-release'" 2>&1 || echo "FAILED")
 
     # Count non-empty lines in output (should be 2 Alpine release lines)
     OUTPUT_LINES=$(echo "$JOB_OUTPUT" | grep -v "^$" | wc -l | tr -d ' ')
 
     # Clean up the image
-    docker exec slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
+    run_container slurmctld rm alpine_3.22.2.sif >/dev/null 2>&1 || true
 
     if [ "$OUTPUT_LINES" -eq 2 ]; then
         print_pass "Singularity multi-node job executed successfully on 2 nodes"
@@ -492,7 +513,7 @@ test_get_jwt_token() {
     print_test "Testing JWT token generation..."
 
     # Get JWT token from scontrol
-    TOKEN_OUTPUT=$(docker exec slurmctld scontrol token 2>&1)
+    TOKEN_OUTPUT=$(run_container slurmctld scontrol token 2>&1)
 
     # Extract token value (format: SLURM_JWT=eyJhb...)
     if echo "$TOKEN_OUTPUT" | grep -q "SLURM_JWT="; then
@@ -536,7 +557,7 @@ test_validate_jwt_authentication() {
     print_test "Testing JWT authentication via slurmrestd..."
 
     # Get JWT token from scontrol
-    TOKEN_OUTPUT=$(docker exec slurmctld scontrol token 2>&1)
+    TOKEN_OUTPUT=$(run_container slurmctld scontrol token 2>&1)
 
     # Extract token value (format: SLURM_JWT=eyJhb...)
     if ! echo "$TOKEN_OUTPUT" | grep -q "SLURM_JWT="; then
@@ -559,7 +580,7 @@ test_validate_jwt_authentication() {
     print_info "  Using data_parser version: $API_VERSION"
 
     # Execute curl request with JWT token and check HTTP status code
-    HTTP_CODE=$(docker exec slurmctld bash -c "curl -s -o /dev/null -w '%{http_code}' -k \
+    HTTP_CODE=$(run_container slurmctld bash -c "curl -s -o /dev/null -w '%{http_code}' -k \
         -H 'X-SLURM-USER-TOKEN: $JWT_TOKEN' \
         -X GET 'http://slurmrestd:6820/slurm/$API_VERSION/diag'" 2>&1)
 
@@ -577,7 +598,7 @@ test_python_version() {
     print_test "Testing Python version..."
 
     # Check Python 3.12 is installed and default
-    PYTHON_VERSION=$(docker exec slurmctld python3 --version 2>&1 | awk '{print $2}')
+    PYTHON_VERSION=$(run_container slurmctld python3 --version 2>&1 | awk '{print $2}')
 
     if echo "$PYTHON_VERSION" | grep -q "^3\.12\."; then
         print_pass "Python 3.12 is the default version ($PYTHON_VERSION)"
@@ -589,7 +610,7 @@ test_python_version() {
 
 # Get the latest data_parser version from slurmrestd
 get_api_version() {
-    local DATA_PARSER_VERSION=$(docker exec slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
+    local DATA_PARSER_VERSION=$(run_container slurmctld bash -c "gosu slurmrest slurmrestd -d list 2>&1 | grep 'data_parser/' | tail -1 | sed 's/.*data_parser\///' | tr -d '[:space:]'" 2>&1)
 
     # Validate format: must be "v" followed by three numbers separated by two dots (e.g., v0.0.44)
     if ! [[ $DATA_PARSER_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -608,14 +629,14 @@ test_rest_api_nodes() {
     print_info "  Using API version: $API_VERSION"
 
     # Get JWT token for authentication
-    JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+    JWT_TOKEN=$(run_container slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
     if [ -z "$JWT_TOKEN" ]; then
         print_fail "Failed to get JWT token for REST API authentication"
         return 1
     fi
 
     # Test REST API with JWT authentication
-    RESPONSE=$(docker exec slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+    RESPONSE=$(run_container slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
         "http://slurmrestd:6820/slurm/${API_VERSION}/nodes" 2>&1)
 
     # Check if response is valid JSON
@@ -646,14 +667,14 @@ test_rest_api_partitions() {
     API_VERSION=$(get_api_version)
 
     # Get JWT token for authentication
-    JWT_TOKEN=$(docker exec slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
+    JWT_TOKEN=$(run_container slurmctld scontrol token 2>&1 | grep "SLURM_JWT=" | cut -d'=' -f2)
     if [ -z "$JWT_TOKEN" ]; then
         print_fail "Failed to get JWT token for REST API authentication"
         return 1
     fi
 
     # Test REST API with JWT authentication
-    RESPONSE=$(docker exec slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
+    RESPONSE=$(run_container slurmctld curl -s -H "X-SLURM-USER-TOKEN: $JWT_TOKEN" \
         "http://slurmrestd:6820/slurm/${API_VERSION}/partitions" 2>&1)
 
     # Check if response is valid JSON
@@ -681,13 +702,13 @@ test_lmod() {
     print_test "Testing Lmod module system..."
 
     # Check version string appears in output (guards against silent eval-of-empty-string failures)
-    if ! docker exec slurmctld bash -l -c "module --version" 2>&1 | grep -q "Modules based on Lua"; then
+    if ! run_container slurmctld bash -l -c "module --version" 2>&1 | grep -q "Modules based on Lua"; then
         print_fail "Lmod not available (module --version did not return expected version string)"
         return 1
     fi
     print_info "  ✓ Lmod is installed"
 
-    if ! docker exec slurmctld bash -l -c "module avail" > /dev/null 2>&1; then
+    if ! run_container slurmctld bash -l -c "module avail" > /dev/null 2>&1; then
         print_fail "module avail failed"
         return 1
     fi
@@ -700,28 +721,28 @@ test_spack() {
     print_test "Testing Spack + Lmod integration..."
 
     # Spack is baked into the image at /usr/local/spack (not cloned at runtime)
-    if ! docker exec slurmctld test -f /usr/local/spack/share/spack/setup-env.sh 2>/dev/null; then
+    if ! run_container slurmctld test -f /usr/local/spack/share/spack/setup-env.sh 2>/dev/null; then
         print_fail "Spack not found at /usr/local/spack (image build issue?)"
         return 1
     fi
     print_info "  ✓ Spack present in image"
 
     # Verify setup-env.sh can be sourced and spack command works
-    if ! docker exec slurmctld bash -c "export SPACK_ROOT=/usr/local/spack && source /usr/local/spack/share/spack/setup-env.sh && spack --version" > /dev/null 2>&1; then
+    if ! run_container slurmctld bash -c "export SPACK_ROOT=/usr/local/spack && source /usr/local/spack/share/spack/setup-env.sh && spack --version" > /dev/null 2>&1; then
         print_fail "Failed to source Spack environment"
         return 1
     fi
     print_info "  ✓ Spack environment loads"
 
     # Verify Lmod modules.yaml is configured
-    if ! docker exec slurmctld grep -q "lmod" /usr/local/spack/etc/spack/modules.yaml 2>/dev/null; then
+    if ! run_container slurmctld grep -q "lmod" /usr/local/spack/etc/spack/modules.yaml 2>/dev/null; then
         print_fail "Spack Lmod module configuration missing"
         return 1
     fi
     print_info "  ✓ Lmod integration configured"
 
     # Verify MODULEPATH includes the Spack Core dir on first login (baked into lmod.sh at build time)
-    if ! docker exec slurmctld bash -l -c 'echo "$MODULEPATH"' 2>/dev/null | grep -q "/opt/spack/modules/"; then
+    if ! run_container slurmctld bash -l -c 'echo "$MODULEPATH"' 2>/dev/null | grep -q "/opt/spack/modules/"; then
         print_fail "MODULEPATH does not include Spack module tree (check /etc/profile.d/lmod.sh)"
         return 1
     fi
@@ -730,19 +751,19 @@ test_spack() {
     # Install gmake via Spack and verify it can be loaded as an Lmod module.
     # gmake has no dependencies so it builds quickly.
     print_info "  Installing gmake via Spack (this may take a few minutes)..."
-    if ! docker exec slurmctld bash -l -c "spack install gmake" > /dev/null 2>&1; then
+    if ! run_container slurmctld bash -l -c "spack install gmake" > /dev/null 2>&1; then
         print_fail "spack install gmake failed"
         return 1
     fi
     print_info "  ✓ spack install gmake succeeded"
 
-    if ! docker exec slurmctld bash -l -c "module --ignore_cache avail 2>&1 | grep -q gmake"; then
+    if ! run_container slurmctld bash -l -c "module --ignore_cache avail 2>&1 | grep -q gmake"; then
         print_fail "gmake module not visible after spack install"
         return 1
     fi
     print_info "  ✓ gmake module visible in module avail"
 
-    if ! docker exec slurmctld bash -l -c "module load \$(module --ignore_cache avail -t 2>&1 | grep gmake | head -1) && gmake --version" > /dev/null 2>&1; then
+    if ! run_container slurmctld bash -l -c "module load \$(module --ignore_cache avail -t 2>&1 | grep gmake | head -1) && gmake --version" > /dev/null 2>&1; then
         print_fail "module load gmake failed or gmake --version did not run"
         return 1
     fi

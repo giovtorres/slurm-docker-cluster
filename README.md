@@ -1,13 +1,13 @@
 # Slurm Docker Cluster
 
 **Slurm Docker Cluster** is a multi-container Slurm cluster designed for rapid
-deployment using Docker Compose. This repository simplifies the process of
+deployment using Docker Compose or Podman Compose. This repository simplifies the process of
 setting up a robust Slurm environment for development, testing, or lightweight
 usage.
 
 ## 🏁 Quick Start
 
-**Requirements:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+**Requirements:** [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/getting-started/installation.html)
 
 ```bash
 git clone https://github.com/giovtorres/slurm-docker-cluster.git
@@ -25,9 +25,13 @@ make build
 make up
 ```
 
+For Podman users, see [README-Podman.md](README-Podman.md) for detailed instructions.
+
 **Supported Slurm versions:** 26.05, 25.11
 
 **Supported architectures (auto-detected):** AMD64, ARM64
+
+**Container runtimes:** Docker, Podman
 
 ## 📦 What's Included
 

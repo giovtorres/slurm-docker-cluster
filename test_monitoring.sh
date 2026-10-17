@@ -3,9 +3,19 @@ set -e
 
 # Test suite for the monitoring profile (Elasticsearch + Kibana)
 # Run with: ./test_monitoring.sh
-# Requires: docker compose --profile monitoring up -d
 
 CI_MODE=${CI:-false}
+
+# Detect container runtime (docker or podman)
+if [ -z "$CONTAINER_RUNTIME" ]; then
+    if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
+        CONTAINER_RUNTIME="podman"
+    else
+        CONTAINER_RUNTIME="docker"
+    fi
+fi
+
+COMPOSE_CMD="$CONTAINER_RUNTIME compose"
 
 if [ "$CI_MODE" = "true" ]; then
     RED=''
@@ -53,7 +63,7 @@ print_info() {
 test_elasticsearch_running() {
     print_test "Checking if Elasticsearch is running..."
 
-    if docker compose ps elasticsearch 2>/dev/null | grep -q "Up"; then
+    if $COMPOSE_CMD ps elasticsearch 2>/dev/null | grep -q "Up"; then
         print_pass "Elasticsearch is running"
     else
         print_fail "Elasticsearch is not running"
@@ -64,7 +74,7 @@ test_elasticsearch_running() {
 test_elasticsearch_healthy() {
     print_test "Checking Elasticsearch cluster health..."
 
-    HEALTH=$(docker exec elasticsearch curl -s "http://localhost:9200/_cluster/health" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+    HEALTH=$(run_container elasticsearch curl -s "http://localhost:9200/_cluster/health" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
 
     if [ "$HEALTH" = "green" ] || [ "$HEALTH" = "yellow" ]; then
         print_pass "Elasticsearch cluster is healthy (status: $HEALTH)"
@@ -77,7 +87,7 @@ test_elasticsearch_healthy() {
 test_kibana_running() {
     print_test "Checking if Kibana is running..."
 
-    if docker compose ps kibana 2>/dev/null | grep -q "Up"; then
+    if $COMPOSE_CMD ps kibana 2>/dev/null | grep -q "Up"; then
         print_pass "Kibana is running"
     else
         print_fail "Kibana is not running"
@@ -88,7 +98,7 @@ test_kibana_running() {
 test_kibana_healthy() {
     print_test "Checking Kibana API status..."
 
-    STATUS=$(docker exec kibana curl -s "http://localhost:5601/api/status" | grep -o '"overall":{"level":"[^"]*"' | cut -d'"' -f6)
+    STATUS=$(run_container kibana curl -s "http://localhost:5601/api/status" | grep -o '"overall":{"level":"[^"]*"' | cut -d'"' -f6)
 
     if [ "$STATUS" = "available" ]; then
         print_pass "Kibana is available"
@@ -101,8 +111,8 @@ test_kibana_healthy() {
 test_slurm_elasticsearch_config() {
     print_test "Checking Slurm Elasticsearch configuration..."
 
-    JOBCOMP_TYPE=$(docker exec slurmctld grep "^JobCompType" /etc/slurm/slurm.conf | cut -d= -f2)
-    JOBCOMP_LOC=$(docker exec slurmctld grep "^JobCompLoc" /etc/slurm/slurm.conf | cut -d= -f2)
+    JOBCOMP_TYPE=$(run_container slurmctld grep "^JobCompType" /etc/slurm/slurm.conf | cut -d= -f2)
+    JOBCOMP_LOC=$(run_container slurmctld grep "^JobCompLoc" /etc/slurm/slurm.conf | cut -d= -f2)
 
     if [ "$JOBCOMP_TYPE" = "jobcomp/elasticsearch" ]; then
         print_info "  JobCompType=$JOBCOMP_TYPE"
@@ -118,7 +128,7 @@ test_job_completion_indexed() {
     print_test "Testing job completion indexing to Elasticsearch..."
 
     # Submit a job and wait for completion
-    JOB_ID=$(docker exec slurmctld bash -c "cd /data && sbatch --wrap='echo test' --wait" 2>&1 | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
+    JOB_ID=$(run_container slurmctld bash -c "cd /data && sbatch --wrap='echo test' --wait" 2>&1 | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p')
 
     if [ -z "$JOB_ID" ]; then
         print_fail "Failed to submit test job"
@@ -130,7 +140,7 @@ test_job_completion_indexed() {
     # Wait for job completion to be indexed (max 30 seconds)
     for i in {1..30}; do
         # Search for the job in Elasticsearch (index is "slurm")
-        RESULT=$(docker exec elasticsearch curl -s "http://localhost:9200/slurm/_search" 2>/dev/null || echo "")
+        RESULT=$(run_container elasticsearch curl -s "http://localhost:9200/slurm/_search" 2>/dev/null || echo "")
 
         if echo "$RESULT" | grep -q "\"jobid\":$JOB_ID"; then
             print_pass "Job $JOB_ID indexed in Elasticsearch"
@@ -141,7 +151,7 @@ test_job_completion_indexed() {
 
     # Show debug info on failure
     print_info "  Checking if index exists..."
-    docker exec elasticsearch curl -s "http://localhost:9200/_cat/indices?v" 2>/dev/null || true
+    run_container elasticsearch curl -s "http://localhost:9200/_cat/indices?v" 2>/dev/null || true
     print_fail "Job $JOB_ID not found in Elasticsearch after 30 seconds"
     return 1
 }

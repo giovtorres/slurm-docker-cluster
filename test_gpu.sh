@@ -4,6 +4,22 @@
 
 set -euo pipefail
 
+# Detect container runtime (docker or podman)
+if [ -z "$CONTAINER_RUNTIME" ]; then
+    if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
+        CONTAINER_RUNTIME="podman"
+    else
+        CONTAINER_RUNTIME="docker"
+    fi
+fi
+
+COMPOSE_CMD="$CONTAINER_RUNTIME compose"
+
+# Function to run container commands
+run_container() {
+    $COMPOSE_CMD exec -T "$@"
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,12 +73,12 @@ check_gpu_enabled() {
 
 # Get the first gpu-worker container name
 get_first_gpu_worker() {
-    docker compose ps gpu-worker --format '{{.Names}}' 2>/dev/null | head -1
+    $COMPOSE_CMD ps gpu-worker --format '{{.Names}}' 2>/dev/null | head -1
 }
 
 # Get the first gpu-worker node name from Slurm
 get_first_gpu_node() {
-    docker exec slurmctld scontrol show nodes 2>/dev/null | grep -o 'NodeName=g[0-9]*' | head -1 | cut -d= -f2
+    run_container slurmctld scontrol show nodes 2>/dev/null | grep -o 'NodeName=g[0-9]*' | head -1 | cut -d= -f2
 }
 
 # Check gpu-worker container is running
@@ -79,7 +95,7 @@ check_gpu_worker_running() {
     fi
 
     local worker_count
-    worker_count=$(docker compose ps gpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
+    worker_count=$($COMPOSE_CMD ps gpu-worker --format '{{.Names}}' 2>/dev/null | wc -l)
 
     log_success "$worker_count gpu-worker container(s) running"
     return 0
@@ -114,7 +130,7 @@ check_gres_configured() {
     fi
 
     local gres_output
-    gres_output=$(docker exec slurmctld scontrol show node "$gpu_node" | grep "Gres=" || true)
+    gres_output=$(run_container slurmctld scontrol show node "$gpu_node" | grep "Gres=" || true)
 
     if [[ ! "$gres_output" =~ gpu:nvidia ]]; then
         log_error "GPU GRES not configured correctly on $gpu_node"
@@ -131,13 +147,13 @@ check_gres_configured() {
 check_gpu_partition() {
     run_test "Check 'gpu' partition exists"
 
-    if ! docker exec slurmctld scontrol show partition gpu &>/dev/null; then
+    if ! run_container slurmctld scontrol show partition gpu &>/dev/null; then
         log_error "'gpu' partition not found"
         return 1
     fi
 
     local partition_nodes
-    partition_nodes=$(docker exec slurmctld scontrol show partition gpu | grep -E "^\s+Nodes=" | cut -d= -f2)
+    partition_nodes=$(run_container slurmctld scontrol show partition gpu | grep -E "^\s+Nodes=" | cut -d= -f2)
 
     if [[ -z "$partition_nodes" ]] || [[ "$partition_nodes" == "(null)" ]]; then
         log_error "GPU partition has no nodes"
@@ -160,17 +176,17 @@ check_nvidia_smi() {
         return 1
     fi
 
-    if ! docker exec "$gpu_worker" nvidia-smi &>/dev/null; then
+    if ! run_container "$gpu_worker" nvidia-smi &>/dev/null; then
         log_error "nvidia-smi not available in $gpu_worker"
         echo "Ensure nvidia-container-toolkit is installed on host"
         return 1
     fi
 
     local gpu_count
-    gpu_count=$(docker exec "$gpu_worker" nvidia-smi --query-gpu=count --format=csv,noheader | head -n1)
+    gpu_count=$(run_container "$gpu_worker" nvidia-smi --query-gpu=count --format=csv,noheader | head -n1)
 
     log_success "nvidia-smi detected $gpu_count GPU(s)"
-    docker exec "$gpu_worker" nvidia-smi
+    run_container "$gpu_worker" nvidia-smi
     return 0
 }
 
@@ -179,7 +195,7 @@ test_gpu_job_submission() {
     run_test "Submit test job requesting GPU GRES"
 
     # Clean up old job outputs
-    docker exec slurmctld bash -c "cd /data && rm -f slurm-*.out gpu-test-*.out" || true
+    run_container slurmctld bash -c "cd /data && rm -f slurm-*.out gpu-test-*.out" || true
 
     # Submit job requesting gpu:1
     local job_script='#!/bin/bash
@@ -204,7 +220,7 @@ fi
 '
 
     local jobid
-    jobid=$(docker exec slurmctld bash -c "cd /data && cat > gpu-job.sh <<'EOF'
+    jobid=$(run_container slurmctld bash -c "cd /data && cat > gpu-job.sh <<'EOF'
 $job_script
 EOF
 chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oP '\\d+'")
@@ -220,7 +236,7 @@ chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oP '\\d+'")
     local elapsed=0
     while [[ $elapsed -lt 60 ]]; do
         local state
-        state=$(docker exec slurmctld scontrol show job "$jobid" | grep "JobState=" | sed -n 's/.*JobState=\([A-Z]*\).*/\1/p' || echo "UNKNOWN")
+        state=$(run_container slurmctld scontrol show job "$jobid" | grep "JobState=" | sed -n 's/.*JobState=\([A-Z]*\).*/\1/p' || echo "UNKNOWN")
 
         if [[ "$state" == "COMPLETED" ]]; then
             log_success "GPU job $jobid completed successfully"
@@ -228,13 +244,13 @@ chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oP '\\d+'")
             # Show job output
             echo ""
             echo "========== Job Output =========="
-            docker exec slurmctld bash -c "cd /data && cat gpu-test-${jobid}.out"
+            run_container slurmctld bash -c "cd /data && cat gpu-test-${jobid}.out"
             echo "================================"
 
             return 0
         elif [[ "$state" == "FAILED" ]] || [[ "$state" == "CANCELLED" ]] || [[ "$state" == "TIMEOUT" ]]; then
             log_error "GPU job $jobid failed with state: $state"
-            docker exec slurmctld bash -c "cd /data && cat gpu-test-${jobid}.out" || echo "No output file"
+            run_container slurmctld bash -c "cd /data && cat gpu-test-${jobid}.out" || echo "No output file"
             return 1
         fi
 
@@ -243,7 +259,7 @@ chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oP '\\d+'")
     done
 
     log_error "GPU job $jobid timed out after 60 seconds"
-    docker exec slurmctld scontrol show job "$jobid"
+    run_container slurmctld scontrol show job "$jobid"
     return 1
 }
 
@@ -253,7 +269,7 @@ test_gpu_allocation() {
 
     # Submit a held job to check allocation
     local jobid
-    jobid=$(docker exec slurmctld bash -c "cd /data && sbatch --hold --partition=gpu --gres=gpu:1 --wrap='sleep 10' | grep -oP '\\d+'")
+    jobid=$(run_container slurmctld bash -c "cd /data && sbatch --hold --partition=gpu --gres=gpu:1 --wrap='sleep 10' | grep -oP '\\d+'")
 
     if [[ -z "$jobid" ]]; then
         log_error "Failed to submit held GPU job"
@@ -261,10 +277,10 @@ test_gpu_allocation() {
     fi
 
     local gres_alloc
-    gres_alloc=$(docker exec slurmctld scontrol show job "$jobid" | grep "TresPerNode=" || echo "")
+    gres_alloc=$(run_container slurmctld scontrol show job "$jobid" | grep "TresPerNode=" || echo "")
 
     # Cancel the held job
-    docker exec slurmctld scancel "$jobid" || true
+    run_container slurmctld scancel "$jobid" || true
 
     if [[ "$gres_alloc" =~ gres/gpu ]]; then
         log_success "GPU allocation visible in job: $gres_alloc"
