@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
+# Auto-detect container runtime (docker or podman)
+if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
+    CONTAINER_RUNTIME="podman"
+else
+    CONTAINER_RUNTIME="docker"
+fi
+
+COMPOSE_CMD="$CONTAINER_RUNTIME compose"
+
 # Auto-detect Slurm version from .env file
 if [ ! -f .env ]; then
     echo "Error: .env file not found"
@@ -45,12 +54,12 @@ do
 
     echo "Copying $SOURCE_FILE to container..."
     export SLURM_TMP=$(cat "$SOURCE_FILE")
-    docker exec slurmctld bash -c "echo \"$SLURM_TMP\" >/etc/slurm/\"$var\""
+    $CONTAINER_RUNTIME exec slurmctld bash -c "echo \"$SLURM_TMP\" >/etc/slurm/\"$var\""
     restart=true
 done
 
 if $restart; then
     echo "Restarting containers..."
-    docker compose restart
+    $COMPOSE_CMD restart
     echo "Configuration updated successfully"
 fi

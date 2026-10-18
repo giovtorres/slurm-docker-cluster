@@ -223,7 +223,7 @@ fi
     jobid=$(run_container slurmctld bash -c "cd /data && cat > gpu-job.sh <<'EOF'
 $job_script
 EOF
-chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oP '\\d+'")
+chmod +x gpu-job.sh && sbatch gpu-job.sh | grep -oE '[0-9]+'")
 
     if [[ -z "$jobid" ]]; then
         log_error "Failed to submit GPU job"
@@ -269,7 +269,7 @@ test_gpu_allocation() {
 
     # Submit a held job to check allocation
     local jobid
-    jobid=$(run_container slurmctld bash -c "cd /data && sbatch --hold --partition=gpu --gres=gpu:1 --wrap='sleep 10' | grep -oP '\\d+'")
+    jobid=$(run_container slurmctld bash -c "cd /data && sbatch --hold --partition=gpu --gres=gpu:1 --wrap='sleep 10' | grep -oE '[0-9]+'")
 
     if [[ -z "$jobid" ]]; then
         log_error "Failed to submit held GPU job"

@@ -204,6 +204,50 @@ until echo "SELECT 1" | mysql -h mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} 2>/de
 
 *Last updated: 2026-10-17*
 
+---
+
+## 🔴 Blocker — Critical Issues from Review (2026-10-17)
+
+### 25. `update_slurmfiles.sh` hardcodes `docker` — breaks Podman support
+- **File**: `update_slurmfiles.sh` lines 48, 54-55
+- **Issue**: Script uses hardcoded `docker exec` and `docker compose` commands instead of respecting the runtime auto-detection used elsewhere in the project.
+- **Impact**: Users running Podman cannot update Slurm config files.
+- **Fix**: Implement runtime auto-detection like in Makefile:
+  ```bash
+  CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-$(if command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then echo "podman"; else echo "docker"; fi)}"
+  COMPOSE_CMD="$CONTAINER_RUNTIME compose"
+  ```
+
+### 26. `test_gpu.sh` uses `grep -P` (Perl regex) — breaks on macOS/BSD
+- **File**: `test_gpu.sh` lines 219, 260
+- **Issue**: `-P` flag for Perl-compatible regex is a GNU grep extension not available on macOS.
+- **Impact**: GPU tests fail on macOS where Podman is commonly used for development.
+- **Fix**: Replace with POSIX-compliant `-E` flag or basic regex:
+  ```bash
+  grep -oE '[0-9]+'  # instead of grep -oP '\d+'
+  ```
+
+### 27. `docker-entrypoint.sh` MySQL password exposed via command-line
+- **File**: `docker-entrypoint.sh` line 52
+- **Issue**: `mysql -p${MYSQL_PASSWORD}` passes password as CLI argument visible via `ps aux` or `/proc/*/cmdline`.
+- **Impact**: Security vulnerability — any user with container access can see the password.
+- **Fix**: Use `MYSQL_PWD` environment variable or `.my.cnf` options file:
+  ```bash
+  MYSQL_PWD="${MYSQL_PASSWORD}" mysql -h mysql -u"${MYSQL_USER}"
+  ```
+
+### 28. `docker-compose.yml` slurmrestd port 6820 exposed to all interfaces
+- **File**: `docker-compose.yml` lines 107-108
+- **Issue**: Port 6820 (Slurm REST API) is bound to `0.0.0.0` by default, exposing it on all network interfaces.
+- **Impact**: Potential unauthorized access to Slurm commands from the host network.
+- **Fix**: Bind to localhost only:
+  ```yaml
+  ports:
+    - "127.0.0.1:6820:6820"
+  ```
+
+---
+
 ## Summary
 
 **Podman Support (Issue #172) - COMPLETED**
