@@ -16,7 +16,7 @@ cp .env.example .env    # optional: edit to change version, enable GPU, etc.
 
 # Option A: Pull pre-built image from Docker Hub (fastest)
 docker pull giovtorres/slurm-docker-cluster:latest
-docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:26.05.2
+docker tag giovtorres/slurm-docker-cluster:latest slurm-docker-cluster:26.05.5
 
 # Option B: Build from source
 make build
@@ -236,13 +236,13 @@ Pre-built multi-arch images (amd64 + arm64) are published on each [GitHub releas
 ```bash
 # CPU images
 docker pull giovtorres/slurm-docker-cluster:latest
-docker pull giovtorres/slurm-docker-cluster:26.05.2          # latest build for this Slurm version
-docker pull giovtorres/slurm-docker-cluster:26.05.2-2.1.0   # pinned to a specific release
+docker pull giovtorres/slurm-docker-cluster:26.05.5          # latest build for this Slurm version
+docker pull giovtorres/slurm-docker-cluster:26.05.5-2.1.0   # pinned to a specific release
 
 # GPU images (built on nvidia/cuda base)
 docker pull giovtorres/slurm-docker-cluster:latest-gpu
-docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu
-docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu-2.1.0
+docker pull giovtorres/slurm-docker-cluster:26.05.5-gpu
+docker pull giovtorres/slurm-docker-cluster:26.05.5-gpu-2.1.0
 ```
 
 ## ⚙️ Advanced
@@ -250,7 +250,7 @@ docker pull giovtorres/slurm-docker-cluster:26.05.2-gpu-2.1.0
 ### Version Management
 
 ```bash
-make set-version VER=25.11.7   # Switch Slurm version
+make set-version VER=25.11.8   # Switch Slurm version
 make version                   # Show current version
 make build-all                 # Build all supported versions
 make test-all                  # Test all versions
@@ -276,8 +276,8 @@ make rebuild
 ```bash
 # Cross-platform build (uses QEMU emulation)
 docker buildx build --platform linux/arm64 \
-  --build-arg SLURM_VERSION=26.05.2 \
-  --load -t slurm-docker-cluster:26.05.2 .
+  --build-arg SLURM_VERSION=26.05.5 \
+  --load -t slurm-docker-cluster:26.05.5 .
 ```
 
 ### Windows subsystem for Linux
